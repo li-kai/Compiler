@@ -1,0 +1,21 @@
+This package aims to provide basic code so that students can work on
+the third project assignment, which is to compile jlite programs to
+ARM assembly code.
+
+The package contains Ocaml codes that handles the front end of the
+compiler for jLite programs.
+
+The main program for this package is 
+		jlite_main.ml
+
+It makes use of the data structure file "jlite_structs.ml" to construct
+parse trees, and "ir3_structs.ml" to construct "ir3" intermediate three-address
+code. Lastly, it provides the data sturture file "arm_structs.ml" to
+construct the assembly code. 
+
+There are some test cases available in the directory "armTests". In this
+directory, we provide the test cases (files end with extension "j"), and
+sample compiled assembly codes (files end with extension "s"). However,
+please note that the assembly code you produce will definitely be
+different from these codes. 
+
