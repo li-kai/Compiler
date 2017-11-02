@@ -1,0 +1,23 @@
+*.annot
+*.cmo
+*.cma
+*.cmi
+*.a
+*.o
+*.cmx
+*.cmxs
+*.cmxa
+
+# ocamlbuild targets
+*.byte
+*.native
+
+# jlite files
+jlite_main
+jlite_lexer.ml
+jlite_parser.ml
+jlite_parser.output
+jlite_parser.mli
+
+# test files
+armTests/*.in
