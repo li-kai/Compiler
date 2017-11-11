@@ -21,3 +21,8 @@ jlite_parser.mli
 
 # test files
 armTests/*.in
+armTests/*.out
+armTests/*.arm
+
+# arm config
+m5out
