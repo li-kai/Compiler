@@ -23,6 +23,11 @@ jlite_parser.mli
 armTests/*.in
 armTests/*.out
 armTests/*.arm
+*.log
+*.cache
 
 # arm config
 m5out
+
+# external config
+.vscode
