@@ -33,11 +33,44 @@ let ir3prog = [
   (IfStmt3 (BinaryExp3 ((RelationalOp "<=", (IntLiteral3 10), (Var3 "i"))), 13));
 ]
 
-let tests = "test suite for sum" >::: [
+let ir3prog_arr = Array.of_list ir3prog
+
+let tests = "test suite for fn_to_basic_blocks" >::: [
   "empty"  >:: (fun _ ->
-(print_string (string_of_list ir3prog string_of_ir3_stmt "\n"));
-    assert_equal 0 (0)
+    assert_equal
+    ~printer: string_of_basic_blocks
+    (fn_to_basic_blocks []) []
   );
+  "converts to basic blocks" >:: (fun _ ->
+    let res = fn_to_basic_blocks ir3prog in
+    assert_equal
+    ~printer: string_of_basic_blocks
+    res [
+      { id = 4; stmts = [ ir3prog_arr.(0) ]};
+      { id = 3; stmts = [
+        ir3prog_arr.(1);
+        ir3prog_arr.(2);
+      ]};
+      { id = 2; stmts = [
+        ir3prog_arr.(3);
+        ir3prog_arr.(4);
+        ir3prog_arr.(5);
+        ir3prog_arr.(6);
+        ir3prog_arr.(7);
+        ir3prog_arr.(8);
+        ir3prog_arr.(9);
+      ]};
+      { id = 1; stmts = [
+        ir3prog_arr.(10);
+        ir3prog_arr.(11);
+        ir3prog_arr.(12);
+      ]};
+      { id = 0; stmts = [
+        ir3prog_arr.(13);
+        ir3prog_arr.(14);
+      ]};
+    ]
+  )
 ]
 
 let _ = run_test_tt_main tests

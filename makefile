@@ -17,6 +17,9 @@ jlite_structs.cmo: jlite_structs.ml
 jlite_annotatedtyping.cmo: jlite_annotatedtyping.ml
 	$(OCAMLC) -c $<
 
+basic_blocks.cmo: basic_blocks.ml
+	$(OCAMLC) -c $<
+
 jlite_toir3.cmo: jlite_toir3.ml
 	$(OCAMLC) -c $<
 
@@ -35,7 +38,7 @@ jlite_parser.mli: jlite_parser.mly
 jlite_lexer.ml: jlite_lexer.mll
 	$(OCAMLLEX) $<
 
-compile: jlite_structs.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo jlite_parser.ml jlite_lexer.ml
+compile: jlite_structs.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo basic_blocks.cmo jlite_parser.ml jlite_lexer.ml
 	$(OCAMLC) -c jlite_lexer.ml
 	$(OCAMLC) -c jlite_parser.ml
 	$(OCAMLC) -c jlite_main.ml
