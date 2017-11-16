@@ -76,7 +76,4 @@ let fn_to_basic_blocks (fn: (ir3_stmt list)) =
   split_by_leader stmts_with_leaders
 
 let string_of_basic_block (blk: block) =
-"\nid: " ^ string_of_int blk.id ^ "\nStmts: " ^ (string_of_indented_stmt_list "\n"  string_of_ir3_stmt blk.stmts)
-
-let string_of_basic_blocks (blks: block list) =
-  string_of_list blks string_of_basic_block ";"
+"\nId " ^ string_of_int blk.id ^ " stmts: " ^ (string_of_indented_stmt_list "\n"  string_of_ir3_stmt blk.stmts)

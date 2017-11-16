@@ -35,16 +35,29 @@ let ir3prog = [
 
 let ir3prog_arr = Array.of_list ir3prog
 
+module Block =
+struct
+  type t = block
+  let compare = fun a b ->
+    let b = a.id = b.id && a.stmts = b.stmts in
+    if b then 0 else 1
+  let pp_printer = fun ppf blk ->
+    Format.pp_print_string ppf(string_of_basic_block blk)
+let pp_print_sep = OUnitDiff.pp_comma_separator
+end
+
+module ListInt = OUnitDiff.ListSimpleMake(Block);;
+
 let tests = "test suite for fn_to_basic_blocks" >::: [
   "empty"  >:: (fun _ ->
-    assert_equal
-    ~printer: string_of_basic_blocks
+    ListInt.assert_equal
+    (* ~printer: string_of_basic_blocks *)
     (fn_to_basic_blocks []) []
   );
   "converts to basic blocks" >:: (fun _ ->
     let res = fn_to_basic_blocks ir3prog in
-    assert_equal
-    ~printer: string_of_basic_blocks
+    ListInt.assert_equal
+    (* ~printer: string_of_basic_blocks *)
     res [
       { id = 4; stmts = [ ir3prog_arr.(0) ]};
       { id = 3; stmts = [
@@ -63,9 +76,9 @@ let tests = "test suite for fn_to_basic_blocks" >::: [
       { id = 1; stmts = [
         ir3prog_arr.(10);
         ir3prog_arr.(11);
-        ir3prog_arr.(12);
-      ]};
+        ]};
       { id = 0; stmts = [
+        ir3prog_arr.(12);
         ir3prog_arr.(13);
         ir3prog_arr.(14);
       ]};

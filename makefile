@@ -62,9 +62,12 @@ test: jlite_main
 	./$< < armTests/test_ops.j > armTests/test_ops.arm
 	$(DIFF) armTests/test_ops.arm armTests/test_ops.s
 
-unit: tests/basic_blocks_test.ml
+unit_basic_block: tests/basic_blocks_test.ml
 	$(OCAMLF) ocamlc -o tests/test -package oUnit -linkpkg -g jlite_structs.ml ir3_structs.ml basic_blocks.ml $<
 	./tests/test
+	rm ./tests/test
+
+unit: unit_basic_block
 
 ############
 clean:

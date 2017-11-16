@@ -16,6 +16,12 @@ To compile the project, run
 make
 ```
 
+To run unit tests, run
+
+```bash
+make unit
+```
+
 To remove compiled files, run
 
 ```bash
@@ -26,7 +32,8 @@ To run the compiled code, download the docker image and run it by
 
 ```bash
 docker pull falconets/pja3
-docker run -d -it --name proj --mount type=bind,source="$(pwd)",target=/usr/local/src/pja3 pja3:latest
+# Assumes pwd = /pja3 folder
+docker run -d -it --name proj --mount type=bind,source="$(pwd)",target=/usr/local/src/pja3 falconets/pja3:latest
 ```
 
 To access the docker container to run the arm code
