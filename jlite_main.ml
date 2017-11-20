@@ -28,17 +28,16 @@ let parse_file file_name =
 		End_of_file -> exit 0
 
 let process prog =
-	begin
-		print_string (Jlite_structs.string_of_jlite_program prog);
-		let typedprog= (Jlite_annotatedtyping.type_check_jlite_program prog) in
-		print_string (Jlite_structs.string_of_jlite_program typedprog);
-		let ir3prog = Jlite_toir3.jlite_program_to_IR3 typedprog in
-		print_string (Ir3_structs.string_of_ir3_program ir3prog);
-		(*
-		let asmprog = Ir3_toasm.toasm_ir3 ir3prog in
-		print_string (Arm_structs.string_of_arm_prog asmprog);
-		*)
-	end
+  begin
+    (* print_string (Jlite_structs.string_of_jlite_program prog); *)
+    let typedprog= (Jlite_annotatedtyping.type_check_jlite_program prog) in
+    (* print_string (Jlite_structs.string_of_jlite_program typedprog); *)
+    let ir3prog = Jlite_toir3.jlite_program_to_IR3 typedprog in
+    print_string (Ir3_structs.string_of_ir3_program ir3prog);
+
+    let asmprog = Ir3_to_arm.prog_to_arm ir3prog in
+    print_string (Arm_structs.string_of_arm_prog asmprog);
+end
 let _ =
  begin
 	Arg.parse [] set_source_file usage_msg ;
