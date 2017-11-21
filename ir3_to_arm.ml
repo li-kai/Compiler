@@ -263,6 +263,11 @@ let stmt_to_arm
      let prog = CMP ("", "a1", immediate_int 1) :: B ("EQ", "."^(string_of_int label3)) :: [] in
      (* TODO: this can be further optimized *)
      [], expr_instrs @ prog
+  | AssignStmt3 (vname, expr) ->
+     let expr_instrs = fst @@ expr_to_arm expr md ir3_prog in
+     let var_offset = offset_of_var md vname in
+     let prog = [STR ("", "", "a1", RegPreIndexed ("fp", -var_offset, false))] in
+     [], expr_instrs @ prog
   | _ -> raise Fatal
 
 
