@@ -93,7 +93,7 @@ let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_dec
   | StringLiteral3 s ->
     begin
       let label_str = fresh_label () in
-      let lbl_instr = [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ s ^ "\\n\"")] in
+      let lbl_instr = [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ s ^ "\"")] in
       let load_instr = LDR ("", "", reg, LabelAddr ("="^label_str)) in
       lbl_instr, ([load_instr], [])
     end
@@ -245,7 +245,7 @@ let stmt_to_arm
       let label_str = fresh_label() in
       match idc3 with
       | StringLiteral3 str ->
-        [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
+        [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ str ^ "\"")],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) ::
         [BL ("", "printf(PLT)")]
 
@@ -259,8 +259,8 @@ let stmt_to_arm
         let var_type = get_var_type var_id3 md in
         let format_string =
           match var_type with
-          | Jlite_structs.IntT | Jlite_structs.BoolT -> "\"%i\""
-          | Jlite_structs.StringT -> "\"%s\""
+          | Jlite_structs.IntT | Jlite_structs.BoolT -> "\"%i\\n\""
+          | Jlite_structs.StringT -> "\"%s\\n\""
           | Jlite_structs.ObjectT _ | Jlite_structs.VoidT | Jlite_structs.Unknown -> failwith "Unknown type!"
         in
         [PseudoInstr (label_str^":"); PseudoInstr (".asciz "^format_string)],
