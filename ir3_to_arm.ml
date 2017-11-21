@@ -268,9 +268,12 @@ let stmt_to_arm
      let var_offset = offset_of_var md vname in
      let prog = [STR ("", "", "a1", RegPreIndexed ("fp", -var_offset, false))] in
      [], expr_instrs @ prog
-  | _ -> raise Fatal
-
-
+  | AssignFieldStmt3 (expr1, expr2) ->
+     let expr2_instrs = fst @@ expr_to_arm expr1 md ir3_prog in
+     let expr1_instrs = fst @@ expr_to_arm expr2 md ir3_prog in
+     let temporary_store_instr = MOV ("", false, "a4", RegOp ("a1")) in
+     let assign_instr = STR ("", "", "a4", RegPreIndexed ("a1", 0, false)) in
+     [], expr2_instrs @ [temporary_store_instr] @ expr1_instrs @ [assign_instr]
 
 let rec stmts_to_arm
     (stmts: ir3_stmt list) (md: md_decl3) (ir3_prog: ir3_program) : arm_program * arm_program =
