@@ -3,12 +3,18 @@ open Arm_structs
 
 exception Fatal;;
 
+
+let rec range ?(start=0) len =
+  if start >= len
+  then []
+  else start :: (range len ~start:(start+1))
+
 let list_find_with_index lst x ~key =
   let rec aux lst idx =
     match lst with
     | hd::tl ->
-       if key hd = x then Some idx
-       else aux tl (idx+1)
+      if key hd = x then Some idx
+      else aux tl (idx+1)
     | [] -> None
   in
   aux lst 0
@@ -24,8 +30,8 @@ let offset_of_class_field (ir3_prog: Ir3_structs.ir3_program) (class_name: Ir3_s
   let rec aux lst =
     match lst with
     | (name, var_decl_list)::tl ->
-       if name = class_name then offset_of_field var_decl_list field_name
-       else aux tl
+      if name = class_name then offset_of_field var_decl_list field_name
+      else aux tl
     | [] -> failwith "Invalid class name"
   in
   let (cdata3, _, _) = ir3_prog in
@@ -81,20 +87,42 @@ let rec stmts_to_arm
       stmt_data @ rest_data, stmt_instr @ rest_instr
     end
 
+(* loads first four params from a1-a4, and the rest from caller's stack *)
+let load_params_onto_stack
+    (num_params: int) (num_localvars: int): arm_program =
+  let stack_size_until_params = 24 + 4 + 4 * num_localvars in
+  let param_num_to_instr (param_num: int): arm_program =
+    if param_num < 4 then
+      STR ("", "", "a" ^ (string_of_int (param_num + 1)), (RegPreIndexed ("fp", -(stack_size_until_params + 4 * param_num), false))) ::
+      []
+    else
+      LDR ("", "", "v1", (RegPreIndexed ("fp", (4 * (param_num - 3)), false))) ::
+      STR ("", "", "v1", (RegPreIndexed ("fp", -(stack_size_until_params + 4 * param_num), false))) ::
+      [] in
+  List.flatten (List.map param_num_to_instr (range num_params))
+
 let md_to_arm
     (md: md_decl3) : arm_program * arm_program =
   let start_instr =
     PseudoInstr("\n" ^ md.id3 ^ ":") ::
     STMFD ("fp" :: "lr" :: "v1" :: "v2" :: "v3" :: "v4" :: "v5" :: []) ::
-    ADD ("", false, "sp", "fp", immediate_int 24) ::
+    ADD ("", false, "fp", "sp", immediate_int 24) ::
     [] in
+
+  let save_local_data_instr =
+    SUB ("", false, "sp", "fp", immediate_int (24 + 4 * List.length (md.localvars3 @ md.params3))) ::
+    [] in
+
+  let params_store_instr = load_params_onto_stack (List.length md.params3) (List.length md.localvars3) in
+
   let end_instr =
     PseudoInstr ("\n" ^ exit_label md ^ ":") ::
     SUB ("", false, "sp", "fp", immediate_int 24) ::
     LDMFD ("fp" :: "pc" :: "v1" :: "v2" :: "v3" :: "v4" :: "v5" :: []) ::
     [] in
+
   let md_data, md_instr = stmts_to_arm md.ir3stmts md in
-  (md_data, start_instr @ md_instr @ end_instr)
+  (md_data, start_instr @ save_local_data_instr @ params_store_instr @ md_instr @ end_instr)
 
 let rec mds_to_arm
     (md_list: md_decl3 list) : arm_program * arm_program =
@@ -116,4 +144,17 @@ let prog_to_arm
   let class_data, class_instr = mds_to_arm md_list in
   let prog_data = main_data @ class_data in
   let prog_instr = main_instr @ class_instr in
-  prog_data @ prog_instr
+  let data =
+    begin
+      PseudoInstr (".data") ::
+      PseudoInstr ("") ::
+      prog_data
+    end in
+  let text =
+    begin
+      PseudoInstr ("\n.text") ::
+      PseudoInstr ("\n.global main") ::
+      prog_instr @
+      [PseudoInstr ("\n")]
+    end in
+  data @ text
