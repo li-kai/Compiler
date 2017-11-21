@@ -212,7 +212,7 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
      init, bef
   | MdCall3 (mname, args) ->
      let init, (prep, cleanup) = prepare_md_call args md3 in
-     init, prep @ [BL ("", "."^mname)] @ cleanup
+     init, prep @ [BL ("", mname)] @ cleanup
   | ObjectCreate3 cname ->
      let class_size = get_class_size cname ir3_program in
      [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
