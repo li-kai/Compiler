@@ -67,7 +67,44 @@ let get_class_size (cname: Ir3_structs.cname3) (ir3_program: Ir3_structs.ir3_pro
   in
   aux cdata3_lst
 
-let expr_to_arm (expr: Ir3_structs.ir3_exp) (ir3_program: Ir3_structs.ir3_program) : arm_program * arm_program =
+let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_decl3) : arm_program * arm_program =
+  match idc3 with
+  | IntLiteral3 i -> [MOV ("", false, reg, immediate_int i)], []
+  | BoolLiteral3 b ->
+     begin
+       match b with
+       | true -> [MOV ("", false, reg, immediate_int 1)], []
+       | false -> [MOV ("", false, reg, immediate_int 0)], []
+     end
+  | Var3 v ->
+     let offset = offset_of_var md3 v in
+     [LDR ("", "", reg, RegPreIndexed ("fp", -offset, false))], [STR ("", "", reg, RegPreIndexed ("fp", -offset, false))]
+
+let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : arm_program * arm_program =
+  let adjust_sp, cleanup_sp =
+    if List.length args > 4 then
+      [SUB ("", false, "sp", "sp", immediate_int (4 * ((List.length args) - 4)))],
+      [ADD ("", false, "sp", "sp", immediate_int (4 * ((List.length args) - 4)))]
+    else [], []
+  in
+  let rec aux idx args =
+    match args with
+    | hd::tl ->
+       let current_instr =
+         if idx < 4 then
+           let bef, aft = convert_idc3 hd ("a"^(string_of_int (idx+1))) md3 in
+           bef
+         else
+           (* ASSUME THAT V1 TO V5 IS FREE *)
+           let bef, aft = convert_idc3 hd "v1" md3 in
+           bef @ [STR ("", "", "v1", RegPreIndexed ("sp", 4 * (idx - 4), false))] @ aft
+       in
+       current_instr @ (aux (idx+1) tl)
+    | [] -> []
+  in
+  adjust_sp @ (aux 0 args), cleanup_sp
+
+let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_program: Ir3_structs.ir3_program) : arm_program * arm_program =
   match expr with
   | BinaryExp3 (op, lhs, rhs) ->
      begin
@@ -87,11 +124,15 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (ir3_program: Ir3_structs.ir3_progra
        | _, _ -> failwith "Invalid UnaryExp3"
      end
   | FieldAccess3 (cname, fname) -> [], [PseudoInstr "TODO"]
-  | Idc3Expr idc3 -> [], [PseudoInstr "TODO"]
-  | MdCall3 (mname, params) -> [], [PseudoInstr "TODO"]
+  | Idc3Expr idc3 ->
+     let bef, aft = convert_idc3 idc3 "v1" md3 in
+     [], bef
+  | MdCall3 (mname, args) ->
+     let prep, cleanup = prepare_md_call args md3 in
+     [], prep @ [BL ("", "."^mname)] @ cleanup
   | ObjectCreate3 cname ->
      let class_size = get_class_size cname ir3_program in
-     [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
+     [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)"); MOV ("", false, "v1", RegOp ("a1"))]
 
 let stmt_to_arm
     (stmt: ir3_stmt) (md: md_decl3) : arm_program * arm_program =
