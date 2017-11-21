@@ -209,7 +209,7 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
      [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
 
 let stmt_to_arm
-    (stmt: ir3_stmt) (md: md_decl3) : arm_program * arm_program =
+    (stmt: ir3_stmt) (md: md_decl3) (ir3_prog: ir3_program) : arm_program * arm_program =
   match stmt with
   | Label3 label ->
     begin
@@ -254,22 +254,27 @@ let stmt_to_arm
       | _ -> failwith "Unhandled type"
     end
   | ReturnStmt3 id3 ->
-     let offset = offset_of_var md3 id3 in
+     let offset = offset_of_var md id3 in
      let ldr = LDR ("", "", "a1", RegPreIndexed ("fp", -offset, false)) in
      [], [ldr]
-  | MdCallStmt3 expr -> [], expr_to_arm expr md3 ir3_program
+  | MdCallStmt3 expr -> [], fst @@ expr_to_arm expr md ir3_prog
+  | IfStmt3 (expr, label3) ->
+     let expr_instrs = fst @@ expr_to_arm expr md ir3_prog in
+     let prog = CMP ("", "a1", immediate_int 1) :: B ("EQ", "."^(string_of_int label3)) :: [] in
+     (* TODO: this can be further optimized *)
+     [], expr_instrs @ prog
   | _ -> raise Fatal
 
 
 
 let rec stmts_to_arm
-    (stmts: ir3_stmt list) (md: md_decl3) : arm_program * arm_program =
+    (stmts: ir3_stmt list) (md: md_decl3) (ir3_prog: ir3_program) : arm_program * arm_program =
   match stmts with
   | [] -> [], []
   | head::tail ->
     begin
-      let stmt_data, stmt_instr = stmt_to_arm head md in
-      let rest_data, rest_instr = stmts_to_arm tail md in
+      let stmt_data, stmt_instr = stmt_to_arm head md ir3_prog in
+      let rest_data, rest_instr = stmts_to_arm tail md ir3_prog in
       stmt_data @ rest_data, stmt_instr @ rest_instr
     end
 
@@ -288,7 +293,7 @@ let load_params_onto_stack
   List.flatten (List.map param_num_to_instr (range num_params))
 
 let md_to_arm
-    (md: md_decl3) : arm_program * arm_program =
+    (md: md_decl3) (prog: ir3_program) : arm_program * arm_program =
   let start_instr =
     PseudoInstr("\n" ^ md.id3 ^ ":") ::
     STMFD ("fp" :: "lr" :: "v1" :: "v2" :: "v3" :: "v4" :: "v5" :: []) ::
@@ -307,18 +312,18 @@ let md_to_arm
     LDMFD ("fp" :: "pc" :: "v1" :: "v2" :: "v3" :: "v4" :: "v5" :: []) ::
     [] in
 
-  let md_data, md_instr = stmts_to_arm md.ir3stmts md in
+  let md_data, md_instr = stmts_to_arm md.ir3stmts md prog in
   (md_data, start_instr @ save_local_data_instr @ params_store_instr @ md_instr @ end_instr)
 
 let rec mds_to_arm
-    (md_list: md_decl3 list) : arm_program * arm_program =
+    (md_list: md_decl3 list) (prog: ir3_program) : arm_program * arm_program =
 
   match md_list with
   | [] -> [], []
   | head::tail ->
     begin
-      let md_data, md_instr = md_to_arm head in
-      let rest_data, rest_instr = mds_to_arm tail in
+      let md_data, md_instr = md_to_arm head prog in
+      let rest_data, rest_instr = mds_to_arm tail prog in
       md_data @ rest_data, md_instr @ rest_instr
     end
 
@@ -326,8 +331,8 @@ let prog_to_arm
     (prog: ir3_program) : arm_program =
 
   let cdata_list, main_md, md_list = prog in
-  let main_data, main_instr = md_to_arm main_md in
-  let class_data, class_instr = mds_to_arm md_list in
+  let main_data, main_instr = md_to_arm main_md prog in
+  let class_data, class_instr = mds_to_arm md_list prog in
   let prog_data = main_data @ class_data in
   let prog_instr = main_instr @ class_instr in
   let data =
