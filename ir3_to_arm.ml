@@ -45,7 +45,7 @@ let offset_of_class_field (ir3_prog: Ir3_structs.ir3_program) (class_name: Ir3_s
 let offset_of_var (md_decl3: Ir3_structs.md_decl3) (var_name: string) : int =
   let var_idx = list_find_with_index (md_decl3.Ir3_structs.localvars3 @ md_decl3.Ir3_structs.params3) var_name (fun (typ, id) -> id) in
   match var_idx with
-  | Some idx -> 24 + 4 * idx
+  | Some idx -> 24 + 4 + 4 * idx
   | _ -> failwith "Invalid local variable access"
 
 let immediate_int
@@ -63,7 +63,7 @@ let exit_label
 let get_class_size (cname: Ir3_structs.cname3) (ir3_program: Ir3_structs.ir3_program) : int =
   let (cdata3_lst, _, _) = ir3_program in
   let rec aux lst =
-    match cdata3_lst with
+    match lst with
     | (name, varlist)::tl ->
         if name = cname then 4 * (List.length varlist)
         else aux tl
@@ -118,7 +118,7 @@ let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : 
   in
   adjust_sp @ (aux (List.length rev_args - 1) rev_args), cleanup_sp
 
-let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_program: Ir3_structs.ir3_program) : arm_program * arm_program =
+let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_program: Ir3_structs.ir3_program) : arm_program =
   match expr with
   | BinaryExp3 (op, lhs, rhs) ->
      begin
@@ -128,16 +128,16 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
        | Jlite_structs.BooleanOp op, x, y ->
           begin
             match op with
-            | "||" -> [], bef1 @ bef2 @ [ORR ("", false, "a1", "a1", RegOp ("a2"))]
-            | "&&" -> [], bef1 @ bef2 @ [AND ("", false, "a1", "A1", RegOp ("a2"))]
+            | "||" -> bef1 @ bef2 @ [ORR ("", false, "a1", "a1", RegOp ("a2"))]
+            | "&&" -> bef1 @ bef2 @ [AND ("", false, "a1", "A1", RegOp ("a2"))]
             | _ -> failwith "Unknown BooleanOp"
           end
        | Jlite_structs.AritmeticOp op, x, y ->
           begin
             match op with
-            | "+" -> [], bef1 @ bef2 @ [ADD ("", false, "a1", "a1", RegOp ("a2"))]
-            | "-" -> [], bef1 @ bef2 @ [SUB ("", false, "a1", "a1", RegOp ("a2"))]
-            | "*" -> [], bef1 @ bef2 @ [MUL ("", false, "a1", "a1", "a2")]
+            | "+" -> bef1 @ bef2 @ [ADD ("", false, "a1", "a1", RegOp ("a2"))]
+            | "-" -> bef1 @ bef2 @ [SUB ("", false, "a1", "a1", RegOp ("a2"))]
+            | "*" -> bef1 @ bef2 @ [MUL ("", false, "a1", "a1", "a2")]
             | _ -> failwith "Unknown AritmeticOp"
           end
        | Jlite_structs.RelationalOp op, x, y ->
@@ -147,32 +147,32 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
                let prog = CMP ("", "a1", RegOp "a2") ::
                             MOV ("EQ", false, "a1", immediate_int 1) ::
                               MOV ("NE", false, "a1", immediate_int 0) :: [] in
-               [], bef1 @ bef2 @ prog
+               bef1 @ bef2 @ prog
             | "!=" ->
                let prog = CMP ("", "a1", RegOp "a2") ::
                             MOV ("NE", false, "a1", immediate_int 1) ::
                               MOV ("EQ", false, "a1", immediate_int 0) :: [] in
-               [], bef1 @ bef2 @ prog
+               bef1 @ bef2 @ prog
             | ">" ->
                let prog = CMP ("", "a1", RegOp "a2") ::
                             MOV ("GT", false, "a1", immediate_int 1) ::
                               MOV ("LE", false, "a1", immediate_int 0) :: [] in
-               [], bef1 @ bef2 @ prog
+               bef1 @ bef2 @ prog
             | "<" ->
                let prog = CMP ("", "a1", RegOp "a2") ::
                             MOV ("LT", false, "a1", immediate_int 1) ::
                               MOV ("GE", false, "a1", immediate_int 0) :: [] in
-               [], bef1 @ bef2 @ prog
+               bef1 @ bef2 @ prog
             | ">=" ->
                let prog = CMP ("", "a1", RegOp "a2") ::
                             MOV ("GE", false, "a1", immediate_int 1) ::
                               MOV ("LT", false, "a1", immediate_int 0) :: [] in
-               [], bef1 @ bef2 @ prog
+               bef1 @ bef2 @ prog
             | "<=" ->
                let prog = CMP ("", "a1", RegOp "a2") ::
                             MOV ("LE", false, "a1", immediate_int 1) ::
                               MOV ("GT", false, "a1", immediate_int 0) :: [] in
-               [], bef1 @ bef2 @ prog
+               bef1 @ bef2 @ prog
             | _ -> failwith "Unknown RelationalOp"
           end
        | _, _, _ -> failwith "Invalid BinaryExpr3"
@@ -182,10 +182,10 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
        match op, operand with
        | Jlite_structs.UnaryOp "-", x ->
           let bef, aft = convert_idc3 x "a1" md3 in
-          [], bef @ [RSB ("", false, "a1", "a1", immediate_int 0)]
+          bef @ [RSB ("", false, "a1", "a1", immediate_int 0)]
        | Jlite_structs.UnaryOp "!", x ->
           let bef, aft = convert_idc3 x "a1" md3 in
-          [], bef @ [EOR ("", false, "a1", "a1", immediate_int 1)]
+          bef @ [EOR ("", false, "a1", "a1", immediate_int 1)]
        | _, _ -> failwith "Invalid UnaryExp3"
      end
   | FieldAccess3 (vname, fname) ->
@@ -197,16 +197,16 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
        | _ -> failwith "Calling FieldAccess invalid object"
      in
      let field_offset = offset_of_class_field ir3_program class_name fname in
-     [], bef @ [LDR ("", "", "a1", RegPreIndexed ("a2", field_offset, false))]
+     bef @ [LDR ("", "", "a1", RegPreIndexed ("a2", field_offset, false))]
   | Idc3Expr idc3 ->
      let bef, aft = convert_idc3 idc3 "a1" md3 in
-     [], bef
+     bef
   | MdCall3 (mname, args) ->
      let prep, cleanup = prepare_md_call args md3 in
-     [], prep @ [BL ("", "."^mname)] @ cleanup
+     prep @ [BL ("", "."^mname)] @ cleanup
   | ObjectCreate3 cname ->
      let class_size = get_class_size cname ir3_program in
-     [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
+     [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
 
 let stmt_to_arm
     (stmt: ir3_stmt) (md: md_decl3) (ir3_prog: ir3_program) : arm_program * arm_program =
@@ -257,20 +257,20 @@ let stmt_to_arm
      let offset = offset_of_var md id3 in
      let ldr = LDR ("", "", "a1", RegPreIndexed ("fp", -offset, false)) in
      [], [ldr]
-  | MdCallStmt3 expr -> [], fst @@ expr_to_arm expr md ir3_prog
+  | MdCallStmt3 expr -> [], expr_to_arm expr md ir3_prog
   | IfStmt3 (expr, label3) ->
-     let expr_instrs = fst @@ expr_to_arm expr md ir3_prog in
+     let expr_instrs = expr_to_arm expr md ir3_prog in
      let prog = CMP ("", "a1", immediate_int 1) :: B ("EQ", "."^(string_of_int label3)) :: [] in
      (* TODO: this can be further optimized *)
      [], expr_instrs @ prog
   | AssignStmt3 (vname, expr) ->
-     let expr_instrs = fst @@ expr_to_arm expr md ir3_prog in
+     let expr_instrs = expr_to_arm expr md ir3_prog in
      let var_offset = offset_of_var md vname in
      let prog = [STR ("", "", "a1", RegPreIndexed ("fp", -var_offset, false))] in
      [], expr_instrs @ prog
   | AssignFieldStmt3 (expr1, expr2) ->
-     let expr2_instrs = fst @@ expr_to_arm expr1 md ir3_prog in
-     let expr1_instrs = fst @@ expr_to_arm expr2 md ir3_prog in
+     let expr2_instrs = expr_to_arm expr1 md ir3_prog in
+     let expr1_instrs = expr_to_arm expr2 md ir3_prog in
      let temporary_store_instr = MOV ("", false, "a4", RegOp ("a1")) in
      let assign_instr = STR ("", "", "a4", RegPreIndexed ("a1", 0, false)) in
      [], expr2_instrs @ [temporary_store_instr] @ expr1_instrs @ [assign_instr]
