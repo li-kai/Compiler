@@ -195,7 +195,7 @@ let rec type_check_md_decl_list
 		match mlst with
 		| [] -> []
 		| md::tail_lst -> 
-			md.ir3id <- SimpleVarId ("%" ^ classid ^ "_" ^ string_of_int count);
+			md.ir3id <- SimpleVarId ("$" ^ classid ^ "_" ^ string_of_int count);
 			if (List.for_all
 				(fun md1 -> 
 					not ((compare_var_ids md.jliteid md1.jliteid) && 
@@ -609,5 +609,5 @@ let type_check_jlite_program
 		let newclasses=(List.map type_check_class_decl classes) in
 		(newmain, newclasses)
 	end
-	*)
-	
+ *)
+
