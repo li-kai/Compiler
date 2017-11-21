@@ -65,7 +65,14 @@ let stmt_to_arm
       let branch_instr = B ("", exit_label md) in
       let instr = mov_instr :: branch_instr :: [] in
       data, instr
-
+    end
+  | GoTo3 label ->
+    begin
+      [], [B ("", "." ^ (string_of_int label))]
+    end
+  | ReadStmt3 id3 ->
+    begin      
+      failwith "Unhandled ir3 statement: ReadStmt3"
     end
   | _ -> raise Fatal
 
