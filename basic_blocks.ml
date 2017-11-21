@@ -3,10 +3,10 @@ open Ir3_structs
 (* Defining type constructs to be used below *)
 
 module Id3Set = Set.Make(
-	struct
-	    let compare = String.compare
-	    type t = id3
-	  end
+  struct
+    let compare = String.compare
+    type t = id3
+  end
   );;
 type id3_set = Id3Set.t
 

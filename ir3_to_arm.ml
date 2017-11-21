@@ -3,8 +3,8 @@ open Arm_structs
 
 exception Fatal;;
 
-let labelcount = ref 0 
-let fresh_label () = 
+let labelcount = ref 0
+let fresh_label () =
   (labelcount:= !labelcount + 1; "L" ^ (string_of_int !labelcount))
 
 let rec range ?(start=0) len =
@@ -65,8 +65,8 @@ let get_class_size (cname: Ir3_structs.cname3) (ir3_program: Ir3_structs.ir3_pro
   let rec aux lst =
     match lst with
     | (name, varlist)::tl ->
-        if name = cname then 4 * (List.length varlist)
-        else aux tl
+      if name = cname then 4 * (List.length varlist)
+      else aux tl
     | [] -> failwith "Invalid class name"
   in
   aux cdata3_lst
@@ -75,8 +75,8 @@ let get_var_type (vname: Ir3_structs.id3) (md3: Ir3_structs.md_decl3) : Ir3_stru
   let rec aux lst =
     match lst with
     | (typ, name) :: tl ->
-       if name = vname then typ
-       else aux tl
+      if name = vname then typ
+      else aux tl
     | [] -> failwith "Invalid variable type lookup"
   in
   aux (md3.Ir3_structs.localvars3 @ md3.Ir3_structs.params3)
@@ -237,25 +237,25 @@ let stmt_to_arm
       [], [B ("", "." ^ (string_of_int label))]
     end
   | ReadStmt3 id3 ->
-    begin      
+    begin
       failwith "Unhandled ir3 statement: ReadStmt3"
     end
   | PrintStmt3 idc3 ->
     begin
       let label_str = fresh_label() in
-      match idc3 with 
+      match idc3 with
       | StringLiteral3 str ->
         [PseudoInstr (label_str); PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
-        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
+        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) ::
         [BL ("", "printf(PLT)")]
 
-      | IntLiteral3 i -> 
+      | IntLiteral3 i ->
         [PseudoInstr (label_str); PseudoInstr (".asciz \"%i\\n\"")],
-        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
-        MOV ("", false, "a2", (immediate_int i)) :: 
+        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) ::
+        MOV ("", false, "a2", (immediate_int i)) ::
         [BL ("", "printf(PLT)")]
 
-      | Var3 var_id3 -> 
+      | Var3 var_id3 ->
         let var_type = get_var_type var_id3 md in
         let format_string =
           match var_type with

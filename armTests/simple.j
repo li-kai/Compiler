@@ -8,8 +8,10 @@ class BoolOpsMain {
 
 class Simple {
 	Int x;
+	Int z;
 
-	Void md1(Int a, Int b, Int c, Int d, Int e) {
+	Void md1() {
+		x = z;
 		return;
 	}
 }

@@ -74,10 +74,10 @@ let make_block (id: int) lines = {
 
 let tests = "test suite basic_blocks" >::: [
 "fn_to_basic_blocks empty"  >:: (fun _ ->
-    ListInt.assert_equal
-    (* ~printer: string_of_basic_blocks *)
-    (fn_to_basic_blocks []) []
-  );
+        ListInt.assert_equal
+          (* ~printer: string_of_basic_blocks *)
+          (fn_to_basic_blocks []) []
+      );
 "fn_to_basic_blocks converts to basic blocks" >:: (fun _ ->
     let res = fn_to_basic_blocks ir3prog in
     ListInt.assert_equal

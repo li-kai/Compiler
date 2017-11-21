@@ -66,11 +66,16 @@ test: jlite_main
 	$(DIFF) armTests/test_ops.arm armTests/test_ops.s
 
 unit_basic_block: tests/basic_blocks_test.ml
-	$(OCAMLF) ocamlc -o tests/test -package oUnit -linkpkg -g jlite_structs.ml ir3_structs.ml basic_blocks.ml $<
-	./tests/test
-	rm ./tests/test
+	$(OCAMLF) ocamlc -o tests/basic_block_test -package oUnit -linkpkg -g jlite_structs.ml ir3_structs.ml basic_blocks.ml $<
+	./tests/basic_block_test
+	rm ./tests/basic_block_test
 
-unit: unit_basic_block
+unit_optimize_ir3: tests/optimize_ir3_test.ml
+	$(OCAMLF) ocamlc -o tests/optimize_ir3 -package oUnit -linkpkg -g jlite_structs.ml ir3_structs.ml optimize_ir3.ml $<
+	./tests/optimize_ir3
+	rm ./tests/optimize_ir3
+
+unit: unit_basic_block unit_optimize_ir3
 
 ############
 clean:
