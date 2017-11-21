@@ -93,7 +93,7 @@ let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_dec
   | StringLiteral3 s ->
      begin
        let label_str = fresh_label () in
-       let lbl_instr = [PseudoInstr (label_str); PseudoInstr (".asciz \"" ^ s ^ "\\n\"")] in
+       let lbl_instr = [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ s ^ "\\n\"")] in
        let load_instr = LDR ("", "", reg, LabelAddr ("="^label_str)) in
        lbl_instr, ([load_instr], [])
      end
@@ -146,7 +146,7 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
             match op with
             | "+" -> init1 @ init2, bef1 @ bef2 @ [ADD ("", false, "a1", "a1", RegOp ("a2"))]
             | "-" -> init1 @ init2, bef1 @ bef2 @ [SUB ("", false, "a1", "a1", RegOp ("a2"))]
-            | "*" -> init1 @ init2, bef1 @ bef2 @ [MUL ("", false, "a1", "a1", "a2")]
+            | "*" -> init1 @ init2, bef1 @ bef2 @ [MUL ("", false, "a3", "a1", "a2"); MOV ("", false, "a1", RegOp ("a3"))]
             | _ -> failwith "Unknown AritmeticOp"
           end
        | Jlite_structs.RelationalOp op, x, y ->
@@ -245,12 +245,12 @@ let stmt_to_arm
       let label_str = fresh_label() in
       match idc3 with 
       | StringLiteral3 str ->
-        [PseudoInstr (label_str); PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
+        [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
         [BL ("", "printf(PLT)")]
 
       | IntLiteral3 i -> 
-        [PseudoInstr (label_str); PseudoInstr (".asciz \"%i\\n\"")],
+        [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"%i\\n\"")],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
         MOV ("", false, "a2", (immediate_int i)) :: 
         [BL ("", "printf(PLT)")]
@@ -263,7 +263,7 @@ let stmt_to_arm
           | Jlite_structs.StringT -> "\"%s\""
           | Jlite_structs.ObjectT _ | Jlite_structs.VoidT | Jlite_structs.Unknown -> failwith "Unknown type!"
         in
-        [PseudoInstr (label_str); PseudoInstr (".asciz "^format_string)],
+        [PseudoInstr (label_str^":"); PseudoInstr (".asciz "^format_string)],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) ::
         LDR ("", "", "a2", (RegPreIndexed ("fp", - offset_of_var md var_id3, false))) ::
         [BL ("", "printf(PLT)")]
