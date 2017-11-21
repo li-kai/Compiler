@@ -50,29 +50,42 @@ let exit_label
     (md: md_decl3): string =
   "." ^ md.id3 ^ "_exit"
 
-let expr_to_arm (expr: Ir3_structs.ir3_exp) =
+let get_class_size (cname: Ir3_structs.cname3) (ir3_program: Ir3_structs.ir3_program) : int =
+  let (cdata3_lst, _, _) = ir3_program in
+  let rec aux lst =
+    match cdata3_lst with
+    | (name, varlist)::tl ->
+        if name = cname then 4 * (List.length varlist)
+        else aux tl
+    | [] -> failwith "Invalid class name"
+  in
+  aux cdata3_lst
+
+let expr_to_arm (expr: Ir3_structs.ir3_exp) (ir3_program: Ir3_structs.ir3_program) : arm_program * arm_program =
   match expr with
-  | BinaryExpr3 (op, lhs, rhs) ->
+  | BinaryExp3 (op, lhs, rhs) ->
      begin
        match op, lhs, rhs with
-       | (BooleanOp op, BoolLiteral3 x, BoolLiteral3 y) -> PseudoInstr "TODO"
-       | (ArithmeticOp op, IntLiteral3 x, IntLiteral3 y) -> PseudoInstr "TODO"
-       | (RelationalOp op, IntLiteral3 x, IntLiteral3 y) -> PseudoInstr "TODO"
-       | (RelationalOp "==", BoolLiteral3 x, BoolLiteral3 y)
-         | (RelationalOp "!=", BoolLiteral3 x, BoolLiteral3 y)
-         | _, _, _ -> failwith "Invalid BinaryExpr3"
+       | Jlite_structs.BooleanOp op, BoolLiteral3 x, BoolLiteral3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.AritmeticOp op, IntLiteral3 x, IntLiteral3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.RelationalOp op, IntLiteral3 x, IntLiteral3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.RelationalOp "==", BoolLiteral3 x, BoolLiteral3 y -> failwith "Invalid BinaryExpr3"
+       | Jlite_structs.RelationalOp "!=", BoolLiteral3 x, BoolLiteral3 y -> failwith "Invalid BinaryExpr3"
+       | _, _, _ -> failwith "Invalid BinaryExpr3"
      end
   | UnaryExp3 (op, operand) ->
      begin
        match op, operand with
-       | UnaryOp "-", IntLiteral3 x -> PseudoInstr "TODO"
-       | UnaryOp "!", BoolLiteral3 x -> PseudoInstr "TODO"
+       | Jlite_structs.UnaryOp "-", IntLiteral3 x -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.UnaryOp "!", BoolLiteral3 x -> [], [PseudoInstr "TODO"]
        | _, _ -> failwith "Invalid UnaryExp3"
      end
-  | FieldAccess3 (cname, fname) -> PseudoInstr "TODO"
-  | Idc3Expr idc3 -> PseudoInstr "TODO"
-  | MdCall3 (mname, params) -> PseudoInstr "TODO"
-  | ObjectCreate3 cname -> PseudoInstr "TODO"
+  | FieldAccess3 (cname, fname) -> [], [PseudoInstr "TODO"]
+  | Idc3Expr idc3 -> [], [PseudoInstr "TODO"]
+  | MdCall3 (mname, params) -> [], [PseudoInstr "TODO"]
+  | ObjectCreate3 cname ->
+     let class_size = get_class_size cname ir3_program in
+     [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
 
 let stmt_to_arm
     (stmt: ir3_stmt) (md: md_decl3) : arm_program * arm_program =
