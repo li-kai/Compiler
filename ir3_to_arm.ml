@@ -50,6 +50,30 @@ let exit_label
     (md: md_decl3): string =
   "." ^ md.id3 ^ "_exit"
 
+let expr_to_arm (expr: Ir3_structs.ir3_exp) =
+  match expr with
+  | BinaryExpr3 (op, lhs, rhs) ->
+     begin
+       match op, lhs, rhs with
+       | (BooleanOp op, BoolLiteral3 x, BoolLiteral3 y) -> PseudoInstr "TODO"
+       | (ArithmeticOp op, IntLiteral3 x, IntLiteral3 y) -> PseudoInstr "TODO"
+       | (RelationalOp op, IntLiteral3 x, IntLiteral3 y) -> PseudoInstr "TODO"
+       | (RelationalOp "==", BoolLiteral3 x, BoolLiteral3 y)
+         | (RelationalOp "!=", BoolLiteral3 x, BoolLiteral3 y)
+         | _, _, _ -> failwith "Invalid BinaryExpr3"
+     end
+  | UnaryExp3 (op, operand) ->
+     begin
+       match op, operand with
+       | UnaryOp "-", IntLiteral3 x -> PseudoInstr "TODO"
+       | UnaryOp "!", BoolLiteral3 x -> PseudoInstr "TODO"
+       | _, _ -> failwith "Invalid UnaryExp3"
+     end
+  | FieldAccess3 (cname, fname) -> PseudoInstr "TODO"
+  | Idc3Expr idc3 -> PseudoInstr "TODO"
+  | MdCall3 (mname, params) -> PseudoInstr "TODO"
+  | ObjectCreate3 cname -> PseudoInstr "TODO"
+
 let stmt_to_arm
     (stmt: ir3_stmt) (md: md_decl3) : arm_program * arm_program =
 
