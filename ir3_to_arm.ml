@@ -56,6 +56,43 @@ let exit_label
     (md: md_decl3): string =
   "." ^ md.id3 ^ "_exit"
 
+let get_class_size (cname: Ir3_structs.cname3) (ir3_program: Ir3_structs.ir3_program) : int =
+  let (cdata3_lst, _, _) = ir3_program in
+  let rec aux lst =
+    match cdata3_lst with
+    | (name, varlist)::tl ->
+        if name = cname then 4 * (List.length varlist)
+        else aux tl
+    | [] -> failwith "Invalid class name"
+  in
+  aux cdata3_lst
+
+let expr_to_arm (expr: Ir3_structs.ir3_exp) (ir3_program: Ir3_structs.ir3_program) : arm_program * arm_program =
+  match expr with
+  | BinaryExp3 (op, lhs, rhs) ->
+     begin
+       match op, lhs, rhs with
+       | Jlite_structs.BooleanOp op, BoolLiteral3 x, BoolLiteral3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.AritmeticOp op, IntLiteral3 x, IntLiteral3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.RelationalOp op, IntLiteral3 x, IntLiteral3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.RelationalOp "==", BoolLiteral3 x, BoolLiteral3 y -> failwith "Invalid BinaryExpr3"
+       | Jlite_structs.RelationalOp "!=", BoolLiteral3 x, BoolLiteral3 y -> failwith "Invalid BinaryExpr3"
+       | _, _, _ -> failwith "Invalid BinaryExpr3"
+     end
+  | UnaryExp3 (op, operand) ->
+     begin
+       match op, operand with
+       | Jlite_structs.UnaryOp "-", IntLiteral3 x -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.UnaryOp "!", BoolLiteral3 x -> [], [PseudoInstr "TODO"]
+       | _, _ -> failwith "Invalid UnaryExp3"
+     end
+  | FieldAccess3 (cname, fname) -> [], [PseudoInstr "TODO"]
+  | Idc3Expr idc3 -> [], [PseudoInstr "TODO"]
+  | MdCall3 (mname, params) -> [], [PseudoInstr "TODO"]
+  | ObjectCreate3 cname ->
+     let class_size = get_class_size cname ir3_program in
+     [], [MOV ("", false, "a1", immediate_int class_size); BL ("", "_Znwj(PLT)")]
+
 let stmt_to_arm
     (stmt: ir3_stmt) (md: md_decl3) : arm_program * arm_program =
 
@@ -71,7 +108,14 @@ let stmt_to_arm
       let branch_instr = B ("", exit_label md) in
       let instr = mov_instr :: branch_instr :: [] in
       data, instr
-
+    end
+  | GoTo3 label ->
+    begin
+      [], [B ("", "." ^ (string_of_int label))]
+    end
+  | ReadStmt3 id3 ->
+    begin      
+      failwith "Unhandled ir3 statement: ReadStmt3"
     end
   | _ -> raise Fatal
 
