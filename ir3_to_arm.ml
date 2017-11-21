@@ -71,6 +71,16 @@ let get_class_size (cname: Ir3_structs.cname3) (ir3_program: Ir3_structs.ir3_pro
   in
   aux cdata3_lst
 
+let get_var_type (vname: Ir3_structs.id3) (md3: Ir3_structs.md_decl3) : Ir3_structs.ir3_type =
+  let rec aux lst =
+    match lst with
+    | (typ, name) :: tl ->
+       if name = vname then typ
+       else aux tl
+    | [] -> failwith "Invalid variable type lookup"
+  in
+  aux (md3.Ir3_structs.localvars3 @ md3.Ir3_structs.params3)
+
 let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_decl3) : arm_program * arm_program =
   match idc3 with
   | IntLiteral3 i -> [MOV ("", false, reg, immediate_int i)], []
@@ -127,7 +137,16 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
        | Jlite_structs.UnaryOp "!", BoolLiteral3 x -> [], [PseudoInstr "TODO"]
        | _, _ -> failwith "Invalid UnaryExp3"
      end
-  | FieldAccess3 (cname, fname) -> [], [PseudoInstr "TODO"]
+  | FieldAccess3 (vname, fname) ->
+     let bef, aft = convert_idc3 (Var3 vname) "v2" md3 in
+     let var_type = get_var_type vname md3 in
+     let class_name =
+       match var_type with
+       | Jlite_structs.ObjectT obj -> obj
+       | _ -> failwith "Calling FieldAccess invalid object"
+     in
+     let field_offset = offset_of_class_field ir3_program class_name fname in
+     [], bef @ [LDR ("", "", "v1", RegPreIndexed ("v2", field_offset, false))]
   | Idc3Expr idc3 ->
      let bef, aft = convert_idc3 idc3 "v1" md3 in
      [], bef
