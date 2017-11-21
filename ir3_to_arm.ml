@@ -3,11 +3,15 @@ open Arm_structs
 
 exception Fatal;;
 
+let labelcount = ref 0 
+let fresh_label () = 
+  (labelcount:= !labelcount + 1; "L" ^ (string_of_int !labelcount))
 
 let rec range ?(start=0) len =
   if start >= len
   then []
   else start :: (range len ~start:(start+1))
+
 
 let list_find_with_index lst x ~key =
   let rec aux lst idx =
@@ -158,7 +162,30 @@ let stmt_to_arm
     begin      
       failwith "Unhandled ir3 statement: ReadStmt3"
     end
+  | PrintStmt3 idc3 ->
+    begin
+      let label_str = fresh_label() in
+      match idc3 with 
+      | StringLiteral3 str ->
+        [PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
+        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
+        [BL ("", "printf(PLT)")]
+
+      | IntLiteral3 i -> 
+        [PseudoInstr (".asciz \"%i\\n\"")],
+        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
+        MOV ("", false, "a2", (immediate_int i)) :: 
+        [BL ("", "printf(PLT)")]
+
+      | Var3 var_id3 -> 
+        [PseudoInstr (".asciz \"%i\\n\"")],
+        LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) ::
+        LDR ("", "", "a2", (RegPreIndexed ("fp", - offset_of_var md var_id3, false))) ::
+        [BL ("", "printf(PLT)")]
+      | _ -> failwith "Unhandled type"
+    end
   | _ -> raise Fatal
+
 
 
 let rec stmts_to_arm
