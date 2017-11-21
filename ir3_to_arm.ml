@@ -210,7 +210,6 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
 
 let stmt_to_arm
     (stmt: ir3_stmt) (md: md_decl3) : arm_program * arm_program =
-
   match stmt with
   | Label3 label ->
     begin
@@ -254,6 +253,10 @@ let stmt_to_arm
         [BL ("", "printf(PLT)")]
       | _ -> failwith "Unhandled type"
     end
+  | ReturnStmt3 id3 ->
+     let offset = offset_of_var md3 id3 in
+     let ldr = LDR ("", "", "a1", RegPreIndexed ("fp", -offset, false)) in
+     [], [ldr]
   | _ -> raise Fatal
 
 
