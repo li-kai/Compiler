@@ -272,12 +272,12 @@ let stmt_to_arm
      let voffset, foffset =
        begin
         match expr1 with
-        | FieldAccess (vname, fname) ->
+        | FieldAccess3 (vname, fname) ->
             let voffset = offset_of_var md vname in
             let var_type = get_var_type vname md in
             let cname =
               match var_type with
-              | ObjectT cname -> cname
+              | Jlite_structs.ObjectT cname -> cname
               | _ -> "Invalid FieldAccess"
             in
             let foffset = offset_of_class_field ir3_prog cname fname in
@@ -286,7 +286,7 @@ let stmt_to_arm
        end
      in
      let expr2_instrs = expr_to_arm expr1 md ir3_prog in
-     let mov_base_instr = LDR ("", "", "a2", RegPreIndexed ("fp", -voffset)) in
+     let mov_base_instr = LDR ("", "", "a2", RegPreIndexed ("fp", -voffset, false)) in
      let assign_instr = STR ("", "", "a1", RegPreIndexed ("a2", -foffset, false)) in
      [], expr2_instrs @ [mov_base_instr] @ [assign_instr]
 
