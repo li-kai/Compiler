@@ -197,7 +197,7 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
        | _ -> failwith "Calling FieldAccess invalid object"
      in
      let field_offset = offset_of_class_field ir3_program class_name fname in
-     bef @ [LDR ("", "", "a1", RegPreIndexed ("a2", field_offset, false))]
+     bef @ [LDR ("", "", "a1", RegPreIndexed ("a2", -field_offset, false))]
   | Idc3Expr idc3 ->
      let bef, aft = convert_idc3 idc3 "a1" md3 in
      bef
@@ -269,11 +269,26 @@ let stmt_to_arm
      let prog = [STR ("", "", "a1", RegPreIndexed ("fp", -var_offset, false))] in
      [], expr_instrs @ prog
   | AssignFieldStmt3 (expr1, expr2) ->
+     let voffset, foffset =
+       begin
+        match expr1 with
+        | FieldAccess (vname, fname) ->
+            let voffset = offset_of_var md vname in
+            let var_type = get_var_type vname md in
+            let cname =
+              match var_type with
+              | ObjectT cname -> cname
+              | _ -> "Invalid FieldAccess"
+            in
+            let foffset = offset_of_class_field ir3_prog cname fname in
+            voffset, foffset
+        | _ -> failwith "Attempting AssignFieldStmt3 to something other than FieldAccess"
+       end
+     in
      let expr2_instrs = expr_to_arm expr1 md ir3_prog in
-     let expr1_instrs = expr_to_arm expr2 md ir3_prog in
-     let temporary_store_instr = MOV ("", false, "a4", RegOp ("a1")) in
-     let assign_instr = STR ("", "", "a4", RegPreIndexed ("a1", 0, false)) in
-     [], expr2_instrs @ [temporary_store_instr] @ expr1_instrs @ [assign_instr]
+     let mov_base_instr = LDR ("", "", "a2", RegPreIndexed ("fp", -voffset)) in
+     let assign_instr = STR ("", "", "a1", RegPreIndexed ("a2", -foffset, false)) in
+     [], expr2_instrs @ [mov_base_instr] @ [assign_instr]
 
 let rec stmts_to_arm
     (stmts: ir3_stmt list) (md: md_decl3) (ir3_prog: ir3_program) : arm_program * arm_program =
