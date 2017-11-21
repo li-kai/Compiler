@@ -123,18 +123,20 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
   | BinaryExp3 (op, lhs, rhs) ->
      begin
        match op, lhs, rhs with
-       | Jlite_structs.BooleanOp op, BoolLiteral3 x, BoolLiteral3 y -> [], [PseudoInstr "TODO"]
-       | Jlite_structs.AritmeticOp op, IntLiteral3 x, IntLiteral3 y -> [], [PseudoInstr "TODO"]
-       | Jlite_structs.RelationalOp op, IntLiteral3 x, IntLiteral3 y -> [], [PseudoInstr "TODO"]
-       | Jlite_structs.RelationalOp "==", BoolLiteral3 x, BoolLiteral3 y -> failwith "Invalid BinaryExpr3"
-       | Jlite_structs.RelationalOp "!=", BoolLiteral3 x, BoolLiteral3 y -> failwith "Invalid BinaryExpr3"
+       | Jlite_structs.BooleanOp op, idc3 x, idc3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.AritmeticOp op, idc3 x, idc3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.RelationalOp op, idc3 x, idc3 y -> [], [PseudoInstr "TODO"]
        | _, _, _ -> failwith "Invalid BinaryExpr3"
      end
   | UnaryExp3 (op, operand) ->
      begin
        match op, operand with
-       | Jlite_structs.UnaryOp "-", IntLiteral3 x -> [], [PseudoInstr "TODO"]
-       | Jlite_structs.UnaryOp "!", BoolLiteral3 x -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.UnaryOp "-", idc3 x ->
+          let bef, aft = convert_idc3 x "v1" md3 in
+          [], bef @ RSB ("", false, "v1", "v1", immediate_int 0)
+       | Jlite_structs.UnaryOp "!", idc3 x ->
+          let bef, aft = convert_idc3 x "v1" md3 in
+          [], bef @ EOR ("", false, "v1", "v1", immediate_int 1)
        | _, _ -> failwith "Invalid UnaryExp3"
      end
   | FieldAccess3 (vname, fname) ->
