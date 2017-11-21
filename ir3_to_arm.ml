@@ -122,21 +122,70 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
   match expr with
   | BinaryExp3 (op, lhs, rhs) ->
      begin
+       let bef1, aft1 = convert_idc3 lhs "v1" md3 in
+       let bef2, aft2 = convert_idc3 rhs "v2" md3 in
        match op, lhs, rhs with
-       | Jlite_structs.BooleanOp op, idc3 x, idc3 y -> [], [PseudoInstr "TODO"]
-       | Jlite_structs.AritmeticOp op, idc3 x, idc3 y -> [], [PseudoInstr "TODO"]
-       | Jlite_structs.RelationalOp op, idc3 x, idc3 y -> [], [PseudoInstr "TODO"]
+       | Jlite_structs.BooleanOp op, x, y ->
+          begin
+            match op with
+            | "||" -> [], bef1 @ bef2 @ [ORR ("", false, "v1", "v1", RegOp ("v2"))]
+            | "&&" -> [], bef1 @ bef2 @ [AND ("", false, "v1", "V1", RegOp ("v2"))]
+            | _ -> failwith "Unknown BooleanOp"
+          end
+       | Jlite_structs.AritmeticOp op, x, y ->
+          begin
+            match op with
+            | "+" -> [], bef1 @ bef2 @ [ADD ("", false, "v1", "v1", RegOp ("v2"))]
+            | "-" -> [], bef1 @ bef2 @ [SUB ("", false, "v1", "v1", RegOp ("v2"))]
+            | "*" -> [], bef1 @ bef2 @ [MUL ("", false, "v1", "v1", "v2")]
+            | _ -> failwith "Unknown AritmeticOp"
+          end
+       | Jlite_structs.RelationalOp op, x, y ->
+          begin
+            match op with
+            | "==" ->
+               let prog = CMP ("", "v1", RegOp "v2") ::
+                            MOV ("EQ", false, "v1", immediate_int 1) ::
+                              MOV ("NE", false, "v1", immediate_int 0) :: [] in
+               [], bef1 @ bef2 @ prog
+            | "!=" ->
+               let prog = CMP ("", "v1", RegOp "v2") ::
+                            MOV ("NE", false, "v1", immediate_int 1) ::
+                              MOV ("EQ", false, "v1", immediate_int 0) :: [] in
+               [], bef1 @ bef2 @ prog
+            | ">" ->
+               let prog = CMP ("", "v1", RegOp "v2") ::
+                            MOV ("GT", false, "v1", immediate_int 1) ::
+                              MOV ("LE", false, "v1", immediate_int 0) :: [] in
+               [], bef1 @ bef2 @ prog
+            | "<" ->
+               let prog = CMP ("", "v1", RegOp "v2") ::
+                            MOV ("LT", false, "v1", immediate_int 1) ::
+                              MOV ("GE", false, "v1", immediate_int 0) :: [] in
+               [], bef1 @ bef2 @ prog
+            | ">=" ->
+               let prog = CMP ("", "v1", RegOp "v2") ::
+                            MOV ("GE", false, "v1", immediate_int 1) ::
+                              MOV ("LT", false, "v1", immediate_int 0) :: [] in
+               [], bef1 @ bef2 @ prog
+            | "<=" ->
+               let prog = CMP ("", "v1", RegOp "v2") ::
+                            MOV ("LE", false, "v1", immediate_int 1) ::
+                              MOV ("GT", false, "v1", immediate_int 0) :: [] in
+               [], bef1 @ bef2 @ prog
+            | _ -> failwith "Unknown RelationalOp"
+          end
        | _, _, _ -> failwith "Invalid BinaryExpr3"
      end
   | UnaryExp3 (op, operand) ->
      begin
        match op, operand with
-       | Jlite_structs.UnaryOp "-", idc3 x ->
+       | Jlite_structs.UnaryOp "-", x ->
           let bef, aft = convert_idc3 x "v1" md3 in
-          [], bef @ RSB ("", false, "v1", "v1", immediate_int 0)
-       | Jlite_structs.UnaryOp "!", idc3 x ->
+          [], bef @ [RSB ("", false, "v1", "v1", immediate_int 0)]
+       | Jlite_structs.UnaryOp "!", x ->
           let bef, aft = convert_idc3 x "v1" md3 in
-          [], bef @ EOR ("", false, "v1", "v1", immediate_int 1)
+          [], bef @ [EOR ("", false, "v1", "v1", immediate_int 1)]
        | _, _ -> failwith "Invalid UnaryExp3"
      end
   | FieldAccess3 (vname, fname) ->
