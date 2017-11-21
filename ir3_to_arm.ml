@@ -236,18 +236,18 @@ let stmt_to_arm
       let label_str = fresh_label() in
       match idc3 with 
       | StringLiteral3 str ->
-        [PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
+        [PseudoInstr (label_str); PseudoInstr (".asciz \"" ^ str ^ "\\n\"")],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
         [BL ("", "printf(PLT)")]
 
       | IntLiteral3 i -> 
-        [PseudoInstr (".asciz \"%i\\n\"")],
+        [PseudoInstr (label_str); PseudoInstr (".asciz \"%i\\n\"")],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) :: 
         MOV ("", false, "a2", (immediate_int i)) :: 
         [BL ("", "printf(PLT)")]
 
       | Var3 var_id3 -> 
-        [PseudoInstr (".asciz \"%i\\n\"")],
+        [PseudoInstr (label_str); PseudoInstr (".asciz \"%i\\n\"")],
         LDR ("", "", "a1", (LabelAddr ("=" ^ label_str))) ::
         LDR ("", "", "a2", (RegPreIndexed ("fp", - offset_of_var md var_id3, false))) ::
         [BL ("", "printf(PLT)")]
