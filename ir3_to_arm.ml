@@ -108,10 +108,10 @@ let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : 
        let current_instr =
          if idx < 4 then
            let bef, aft = convert_idc3 hd ("a"^(string_of_int (idx+1))) md3 in
-           bef
+           bef @ (aux (idx-1) tl)
          else
            let bef, aft = convert_idc3 hd "a1" md3 in
-           bef @ [STR ("", "", "v1", RegPreIndexed ("sp", 4 * (idx - 4), false))] @ aft
+           bef @ [STR ("", "", "v1", RegPreIndexed ("sp", 4 * (idx - 4), false))] @ aft @ (aux (idx-1) tl)
        in
        current_instr @ (aux (idx+1) tl)
     | [] -> []
