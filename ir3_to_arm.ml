@@ -257,6 +257,7 @@ let stmt_to_arm
      let offset = offset_of_var md3 id3 in
      let ldr = LDR ("", "", "a1", RegPreIndexed ("fp", -offset, false)) in
      [], [ldr]
+  | MdCallStmt3 expr -> [], expr_to_arm expr md3 ir3_program
   | _ -> raise Fatal
 
 
