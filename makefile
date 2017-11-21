@@ -9,7 +9,7 @@ GEM=/usr/local/src/gem5/build/ARM/gem5.opt \
 	/usr/local/src/gem5/configs/example/se.py -c
 ############
 
-all: clean jlite_main
+all: jlite_main
 
 jlite_structs.cmo: jlite_structs.ml
 	$(OCAMLC) -c $<
