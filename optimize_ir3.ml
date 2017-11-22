@@ -11,10 +11,7 @@ let get_val ht idc3_id =
   match idc3_id with
   | Var3 id ->
     if temp_var id
-    then
-      let v = Hashtbl.find ht id in
-      let _ = Hashtbl.remove ht id in
-      v
+    then Hashtbl.find ht id
     else Var3 id
   | _ -> idc3_id
 
@@ -82,10 +79,12 @@ let replace_temp_with_constants
           Hashtbl.add ht id e;
           aux_replace_stmts tail ht
         | _ ->
-          Hashtbl.add ht id (Var3 id);
-          AssignStmt3 (id, replace_temp_in_exp expr ht) :: aux_replace_stmts tail ht
+          let _ = Hashtbl.add ht id (Var3 id) in
+          let new_expr = replace_temp_in_exp expr ht in
+          AssignStmt3 (id, new_expr) :: aux_replace_stmts tail ht
       else
-        AssignStmt3 (id, replace_temp_in_exp expr ht) :: aux_replace_stmts tail ht
+        let new_expr = replace_temp_in_exp expr ht in
+        AssignStmt3 (id, new_expr) :: aux_replace_stmts tail ht
     | head :: tail ->
       begin
         let new_head =
@@ -103,7 +102,6 @@ let replace_temp_with_constants
         if temp_var id
         then
           let v = Hashtbl.find ht id in
-          let _ = Hashtbl.remove ht id in
           PrintStmt3 v :: []
         else head :: []
       | ReturnStmt3 id ->
