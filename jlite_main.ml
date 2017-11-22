@@ -6,6 +6,7 @@
 open Jlite_annotatedtyping
 open Ir3_structs
 open Jlite_toir3
+open Basic_blocks
 open Optimize_ir3
 
 let source_files = ref []
@@ -45,13 +46,14 @@ let process prog =
 
     print_string (Ir3_structs.string_of_ir3_program ir3prog);
 
-    let asmprog = Ir3_to_arm.prog_to_arm ir3prog in
-    print_string (Arm_structs.string_of_arm_prog asmprog);
 
     let prog_blocks = Basic_blocks.prog_to_blocks ir3prog in
 
     let new_basic_blocks = Register_allocation.Liveness_analysis.obtain_new_basic_blocks prog_blocks in
-     print_endline @@ Register_allocation.Liveness_analysis.string_of_new_basic_blocks new_basic_blocks
+    let intervals = Register_allocation.live_interval_from_blocks new_basic_blocks prog_blocks.edges_out in
+    let reg_tbl = Register_allocation.linear_scan intervals in
+    let asmprog = Ir3_to_arm.prog_to_arm ir3prog reg_tbl in
+    print_string (Arm_structs.string_of_arm_prog asmprog);
   end
 let _ =
   begin

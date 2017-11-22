@@ -382,9 +382,8 @@ let rec mds_to_arm
     end
 
 let prog_to_arm
-    (prog: ir3_program) : arm_program =
-    (* Pass in intervals *)
-  (* let _ = RegisterAllocation.linear_scan prog in *)
+    (prog: ir3_program) reg_map: arm_program =
+  let _ = Hashtbl.iter (fun k v -> Hashtbl.add idc3_to_reg k v) reg_map in
   let cdata_list, main_md, md_list = prog in
   let main_data, main_instr = md_to_arm main_md prog in
   let class_data, class_instr = mds_to_arm md_list prog in
