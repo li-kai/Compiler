@@ -5,7 +5,8 @@ type register = string
 type interval = (int * int)
 
 (* Registers available *)
-let registers = 5
+let no_registers = 5
+let registers = ["v0"; "v1"; "v2"; "v3"; "v4"]
 
 type result = {
   id: id3;
@@ -54,7 +55,7 @@ type lsra_t = {
      - If not, we simply indicate the variable is using
        the next available free register
  *)
-let linear_scan (intvs: live_interval list): result list =
+let linear_scan (intvs: live_interval list) =
   let sort_interval a b =
     let (x, _) = a.intv in
     let (y, _) = b.intv in
@@ -63,8 +64,8 @@ let linear_scan (intvs: live_interval list): result list =
   let sorted_intvs = List.sort sort_interval intvs in
   let lsra: lsra_t = {
     active = Intv_to_id.empty;
-    result_tbl = Hashtbl.create registers;
-    free_reg = [];
+    result_tbl = Hashtbl.create no_registers;
+    free_reg = registers;
     intervals = [];
   } in
   (*
@@ -100,7 +101,7 @@ let linear_scan (intvs: live_interval list): result list =
   in
   let def_reg (intv: live_interval) =
     let _ = expire_old_intervals intv in
-    if Intv_to_id.cardinal lsra.active = registers then
+    if Intv_to_id.cardinal lsra.active = no_registers then
       spill_at_interval intv
     else
       let to_be_used = List.hd lsra.free_reg in
@@ -109,13 +110,12 @@ let linear_scan (intvs: live_interval list): result list =
       lsra.free_reg <- List.tl lsra.free_reg;
       Hashtbl.add lsra.result_tbl intv.id to_be_used;
   in let _ = List.iter def_reg sorted_intvs in
-  let accum_results (k: id3) (v: register) (acc: result list) =
+  (* let accum_results (k: id3) (v: register) (acc: result list) =
     let (intv_id, intv) = List.find (fun (id, i) -> id = k) lsra.intervals in
     let res = { id = k; reg = v; intv; } in
     res::acc
-  in
-  Hashtbl.fold accum_results lsra.result_tbl []
-
+  in *)
+  lsra.result_tbl
 
 (* traverse the list of blocks and keep track of the min live value and mindead value for each id *)
 let live_interval_from_blocks (bc: block_collection) : live_interval list =
