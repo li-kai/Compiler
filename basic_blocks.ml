@@ -167,12 +167,12 @@ let rec find_jump (fn: (line list)): (ir3_stmt option) =
     )
   | head::tail -> find_jump(tail)
 
-let find_dest_of_jump (blks: (block list)) (jump) =
+let find_dest_of_jump (blks: (block list)) (jump) (id_to_fn) =
   let target = match jump with
     | GoTo3 lb -> string_of_int lb
     | MdCallStmt3 x -> (
         match x with
-        | MdCall3 (md, _) -> md
+        | MdCall3 (md, _) -> (Hashtbl.find id_to_fn md)
         | _ -> failwith "What is the method calling?"
       )
     | IfStmt3 (_, lb) -> string_of_int lb
@@ -191,7 +191,7 @@ let find_dest_of_jump (blks: (block list)) (jump) =
   in
   List.find identify_dest blks
 
-let get_flow_graph (blks: (block list)) exit_node =
+let get_flow_graph (blks: (block list)) exit_node id_to_fn =
   let tbl_out = Hashtbl.create (List.length blks) in
   let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
   let _ = Hashtbl.add tbl_out exit_node.id ["exit"] in
@@ -207,14 +207,14 @@ let get_flow_graph (blks: (block list)) exit_node =
     | exit::[] -> ();
     | head::next::tail ->
       let jump = find_jump head.lines in
-      (* 1. There is a conditional or unconditional jump from the end of B
+        (* 1. There is a conditional or unconditional jump from the end of B
          to the beginning of C. *)
         let _ = (
           match jump with
           | Some inst ->
             print_endline ("jump is " ^ string_of_ir3_stmt inst);
             let entry = Hashtbl.find tbl_out head.id in
-            let dest_id = (find_dest_of_jump blks inst).id in
+            let dest_id = (find_dest_of_jump blks inst id_to_fn).id in
             if not(List.mem dest_id entry) then
               Hashtbl.add tbl_out head.id (dest_id::entry);
           | None -> ()
@@ -282,11 +282,15 @@ let number_lines_of_blk (blk_cl: block_collection): block_collection =
 let prog_to_blocks (prog: ir3_program): block_collection =
   let (c_list, c_mthd, mthd_list) = prog in
   let all_methods = c_mthd::mthd_list in
+  let id_to_fn = Hashtbl.create (List.length all_methods) in
   let make_block mthd: block list =
     let mthd_blks = fn_to_basic_blocks mthd.ir3stmts in
     match mthd_blks with
     | [] -> []
-    | hd::tail -> { hd with id = mthd.id3 }::tail
+    | hd::tail -> (
+      Hashtbl.add id_to_fn hd.id mthd.id3;
+      hd::tail;
+    );
   in
   let all_block_blocks = List.map make_block all_methods in
   let exit_node = List.hd(List.rev (List.hd all_block_blocks)) in
@@ -296,6 +300,6 @@ let prog_to_blocks (prog: ir3_program): block_collection =
   (* let _ = List.iter (fun b -> print_string (string_of_basic_block b)) all_blocks in *)
   let blk_cl = {
     blocks = all_blocks;
-    edges_out = get_flow_graph all_blocks exit_node;
+    edges_out = get_flow_graph all_blocks exit_node id_to_fn;
   }
   in number_lines_of_blk blk_cl
