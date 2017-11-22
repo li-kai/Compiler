@@ -12,6 +12,7 @@ type id3_set = StringSet.t
 type block_id_set = StringSet.t
 
 type line = {
+  no: int;
   stmt: ir3_stmt;
   next_use: id3_set;
   live: id3_set;
@@ -83,8 +84,11 @@ let fresh_blk () =
 let reset_blk () =
   blkcount:= -1
 
+let linecount = ref (-1)
+
 let fresh_line (stmt) =
   {
+    no = !linecount + 1;
     stmt;
     next_use = StringSet.empty;
     live = StringSet.empty;
@@ -92,21 +96,23 @@ let fresh_line (stmt) =
 
 let rec split_by_leader (fn: (bool * ir3_stmt) list): block list =
   match fn with
-    | [] -> []
-    | (boolean, head)::tail -> (
+  | [] -> []
+  | (boolean, head)::tail ->
+    begin
       match split_by_leader(tail) with
-        | [] -> let blk = fresh_blk() in
-          [{ blk with lines = [fresh_line head] }]
-        | arr_head::tail ->
-          if boolean == true then
+      | [] -> let blk = fresh_blk() in
+        [{ blk with lines = [fresh_line head] }]
+      | arr_head::tail ->
+        if boolean == true then
           let finished_block = {
             arr_head with lines = (fresh_line head)::arr_head.lines
           } in [fresh_blk()] @ [finished_block] @tail
-          else
+        else
           let joined_block = {
             arr_head with lines = (fresh_line head)::arr_head.lines
           } in [joined_block] @tail
-    )
+    end
+
 
 let fn_to_basic_blocks (fn: (ir3_stmt list)) =
   let stmts_with_leaders = identify_leaders fn in
@@ -146,51 +152,51 @@ let string_of_basic_block (blk: block) =
  *)
 
 let find_used_in_idc3 (var_id: idc3): id3_set =
-	match var_id with
-	| Var3 v -> StringSet.singleton v
+  match var_id with
+  | Var3 v -> StringSet.singleton v
   | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> StringSet.empty
 
 let rec find_used_in_idc3_list (var_id_list: idc3 list): id3_set =
-	match var_id_list with
-	| head::tail ->
-		StringSet.union (find_used_in_idc3 head) (find_used_in_idc3_list tail)
-	| [] ->
-		StringSet.empty
+  match var_id_list with
+  | head::tail ->
+	StringSet.union (find_used_in_idc3 head) (find_used_in_idc3_list tail)
+  | [] ->
+	StringSet.empty
 
 (* returns the variables used in an ir3 expression *)
 let rec find_used_in_expr (expr:ir3_exp): id3_set =
-	match expr with
-	| BinaryExp3 (_, a, b) ->
-		StringSet.union (find_used_in_idc3 a) (find_used_in_idc3 b)
-	| UnaryExp3 (_, a) ->
-		(find_used_in_idc3 a)
-	| FieldAccess3 (obj, _) ->
-		StringSet.singleton obj
-	| Idc3Expr a ->
-		(find_used_in_idc3 a)
-	| MdCall3 (_, var_list) ->
-		(find_used_in_idc3_list var_list)
-	| ObjectCreate3 _ ->
-		StringSet.empty
+  match expr with
+  | BinaryExp3 (_, a, b) ->
+	StringSet.union (find_used_in_idc3 a) (find_used_in_idc3 b)
+  | UnaryExp3 (_, a) ->
+	(find_used_in_idc3 a)
+  | FieldAccess3 (obj, _) ->
+	StringSet.singleton obj
+  | Idc3Expr a ->
+	(find_used_in_idc3 a)
+  | MdCall3 (_, var_list) ->
+	(find_used_in_idc3_list var_list)
+  | ObjectCreate3 _ ->
+	StringSet.empty
 
 (* returns the list of the variables used in a statement *)
 let find_used_vars (stmt:ir3_stmt): id3_set =
-	match stmt with
-	| IfStmt3 (expr, _) ->
-		find_used_in_expr expr
-	| PrintStmt3 var_id ->
-		find_used_in_idc3 var_id
-	| AssignStmt3 (_, expr) ->
+  match stmt with
+  | IfStmt3 (expr, _) ->
+	find_used_in_expr expr
+  | PrintStmt3 var_id ->
+	find_used_in_idc3 var_id
+  | AssignStmt3 (_, expr) ->
     find_used_in_expr expr
-	| AssignFieldStmt3 (expr1, expr2) ->
-		StringSet.union (find_used_in_expr expr1) (find_used_in_expr expr2)
-	| MdCallStmt3 expr ->
-		find_used_in_expr expr
-	| ReturnStmt3 var ->
-		StringSet.singleton var
+  | AssignFieldStmt3 (expr1, expr2) ->
+	StringSet.union (find_used_in_expr expr1) (find_used_in_expr expr2)
+  | MdCallStmt3 expr ->
+	find_used_in_expr expr
+  | ReturnStmt3 var ->
+	StringSet.singleton var
   | ReturnVoidStmt3 | Label3 _ |
     GoTo3 _ | ReadStmt3 _  ->
-		StringSet.empty
+	StringSet.empty
 
 let find_not_used (stmt:ir3_stmt): id3_set =
   match stmt with
@@ -201,25 +207,25 @@ let find_not_used (stmt:ir3_stmt): id3_set =
 let rec get_liveness_of_basic_block (blk: block) =
   let rec helper (lines: line list) =
     match lines with
-      | [] -> []
-      | line :: [] ->  (* Final stmt live out is empty *)
+    | [] -> []
+    | line :: [] ->  (* Final stmt live out is empty *)
       let next_use = (find_used_vars line.stmt) in
-        { line with
-          next_use;
-          live = next_use;
-        }::[]
-      | line :: tail ->
-        let computed = helper tail in
-        let head = List.hd computed in
-        let next_use = (find_used_vars line.stmt) in
-        (* e.g. x = x + 1, we remove x from not_live *)
-        let not_used = (find_not_used line.stmt) in
-        let diffed = (StringSet.diff head.live not_used) in
-        let live = StringSet.union diffed next_use in
-        { line with
-          next_use;
-          live;
-        }::computed
+      { line with
+        next_use;
+        live = next_use;
+      }::[]
+    | line :: tail ->
+      let computed = helper tail in
+      let head = List.hd computed in
+      let next_use = (find_used_vars line.stmt) in
+      (* e.g. x = x + 1, we remove x from not_live *)
+      let not_used = (find_not_used line.stmt) in
+      let diffed = (StringSet.diff head.live not_used) in
+      let live = StringSet.union diffed next_use in
+      { line with
+        next_use;
+        live;
+      }::computed
   in
   { blk with lines = helper blk.lines }
 
@@ -254,19 +260,19 @@ let empty_block = {
 
 let rec find_jump (fn: (line list)): (ir3_stmt option) =
   match fn with
-    | [] -> None
-    | line::[] -> (
+  | [] -> None
+  | line::[] -> (
       match line.stmt with
-        | GoTo3 _ | MdCallStmt3 _ | IfStmt3 _ -> Some line.stmt
-        | _ -> None
+      | GoTo3 _ | MdCallStmt3 _ | IfStmt3 _ -> Some line.stmt
+      | _ -> None
     )
-    | head::tail -> find_jump(tail)
+  | head::tail -> find_jump(tail)
 
 let find_dest_of_jump (blks: (block list)) (jump) =
   let target = match jump with
     | GoTo3 lb -> string_of_int lb
     | MdCallStmt3 x -> (
-      match x with
+        match x with
         | MdCall3 (md, _) -> md
         | _ -> failwith "What is the method calling?"
       )
@@ -275,11 +281,11 @@ let find_dest_of_jump (blks: (block list)) (jump) =
   in
   let identify_dest blk =
     match blk.lines with
-      | [] -> false
-      | hd::tail -> (
+    | [] -> false
+    | hd::tail -> (
         match hd.stmt with
-          | (Label3 label) -> (string_of_int label) = target
-          | _ -> blk.id = target
+        | (Label3 label) -> (string_of_int label) = target
+        | _ -> blk.id = target
       )
   in
   List.find identify_dest blks
@@ -294,34 +300,34 @@ let get_flow_graph (blks: (block list)) =
   in
   let rec join_all_blocks blks: unit =
     match blks with
-      | [] -> ();
-      | exit::[] -> ();
-      | head::next::tail ->
-        let jump = find_jump head.lines in
-        (* 1. There is a conditional or unconditional jump from the end of B
+    | [] -> ();
+    | exit::[] -> ();
+    | head::next::tail ->
+      let jump = find_jump head.lines in
+      (* 1. There is a conditional or unconditional jump from the end of B
          to the beginning of C. *)
-        let _ = (
-          match jump with
-          | Some inst ->
-            let entry = Hashtbl.find tbl_out head.id in
-            let dest_id = (find_dest_of_jump blks inst).id in
-            let new_set = StringSet.add dest_id entry in
-            Hashtbl.add tbl_out head.id new_set;
-          | None -> ()
-        ) in
-        (* 2. C immediately follows B in the original order of
+      let _ = (
+        match jump with
+        | Some inst ->
+          let entry = Hashtbl.find tbl_out head.id in
+          let dest_id = (find_dest_of_jump blks inst).id in
+          let new_set = StringSet.add dest_id entry in
+          Hashtbl.add tbl_out head.id new_set;
+        | None -> ()
+      ) in
+      (* 2. C immediately follows B in the original order of
          the three-address instructions, and B does not end
          in an unconditional jump. *)
-        let _ = (
-          match jump with
-            | Some (GoTo3 _) | Some (MdCallStmt3 _) -> ()
-            (* Any other type are true *)
-            | _ ->
-              let entry = Hashtbl.find tbl_out head.id in
-              let new_set = StringSet.add next.id entry in
-              Hashtbl.add tbl_out head.id new_set;
-        ) in
-        join_all_blocks (next::tail);
+      let _ = (
+        match jump with
+        | Some (GoTo3 _) | Some (MdCallStmt3 _) -> ()
+        (* Any other type are true *)
+        | _ ->
+          let entry = Hashtbl.find tbl_out head.id in
+          let new_set = StringSet.add next.id entry in
+          Hashtbl.add tbl_out head.id new_set;
+      ) in
+      join_all_blocks (next::tail);
   in
   let _ = join_all_blocks blks in
   tbl_out
@@ -337,8 +343,8 @@ let prog_to_blocks (prog: ir3_program): block_collection =
   let make_block mthd: block list =
     let mthd_blks = fn_to_basic_blocks mthd.ir3stmts in
     match mthd_blks with
-      | [] -> []
-      | hd::tail -> { hd with id = mthd.id3 }::tail
+    | [] -> []
+    | hd::tail -> { hd with id = mthd.id3 }::tail
   in
   let all_blocks = List.flatten (List.map make_block all_methods) in
   {
