@@ -2,13 +2,14 @@ open Ir3_structs
 
 (* Defining type constructs to be used below *)
 
-module Id3Set = Set.Make(
+module StringSet = Set.Make(
   struct
     let compare = String.compare
     type t = id3
   end
   );;
-type id3_set = Id3Set.t
+type id3_set = StringSet.t
+type block_id_set = StringSet.t
 
 type line = {
   stmt: ir3_stmt;
@@ -74,8 +75,8 @@ let fresh_blk () =
   blkcount:= !blkcount + 1;
   { id = string_of_int !blkcount;
     lines = [];
-    live_in = Id3Set.empty;
-    live_out = Id3Set.empty;
+    live_in = StringSet.empty;
+    live_out = StringSet.empty;
   }
 
   (* For testing *)
@@ -85,8 +86,8 @@ let reset_blk () =
 let fresh_line (stmt) =
   {
     stmt;
-    next_use = Id3Set.empty;
-    live = Id3Set.empty;
+    next_use = StringSet.empty;
+    live = StringSet.empty;
   }
 
 let rec split_by_leader (fn: (bool * ir3_stmt) list): block list =
@@ -112,7 +113,7 @@ let fn_to_basic_blocks (fn: (ir3_stmt list)) =
   split_by_leader stmts_with_leaders
 
 let string_of_id3_set (set: id3_set) =
-  String.concat ", " (Id3Set.elements set)
+  String.concat ", " (StringSet.elements set)
 
 let string_of_line (line: line) =
   let stmt_str = string_of_ir3_stmt line.stmt in
@@ -146,31 +147,31 @@ let string_of_basic_block (blk: block) =
 
 let find_used_in_idc3 (var_id: idc3): id3_set =
 	match var_id with
-	| Var3 v -> Id3Set.singleton v
-  | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> Id3Set.empty
+	| Var3 v -> StringSet.singleton v
+  | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> StringSet.empty
 
 let rec find_used_in_idc3_list (var_id_list: idc3 list): id3_set =
 	match var_id_list with
 	| head::tail ->
-		Id3Set.union (find_used_in_idc3 head) (find_used_in_idc3_list tail)
+		StringSet.union (find_used_in_idc3 head) (find_used_in_idc3_list tail)
 	| [] ->
-		Id3Set.empty
+		StringSet.empty
 
 (* returns the variables used in an ir3 expression *)
 let rec find_used_in_expr (expr:ir3_exp): id3_set =
 	match expr with
 	| BinaryExp3 (_, a, b) ->
-		Id3Set.union (find_used_in_idc3 a) (find_used_in_idc3 b)
+		StringSet.union (find_used_in_idc3 a) (find_used_in_idc3 b)
 	| UnaryExp3 (_, a) ->
 		(find_used_in_idc3 a)
 	| FieldAccess3 (obj, _) ->
-		Id3Set.singleton obj
+		StringSet.singleton obj
 	| Idc3Expr a ->
 		(find_used_in_idc3 a)
 	| MdCall3 (_, var_list) ->
 		(find_used_in_idc3_list var_list)
 	| ObjectCreate3 _ ->
-		Id3Set.empty
+		StringSet.empty
 
 (* returns the list of the variables used in a statement *)
 let find_used_vars (stmt:ir3_stmt): id3_set =
@@ -182,20 +183,20 @@ let find_used_vars (stmt:ir3_stmt): id3_set =
 	| AssignStmt3 (_, expr) ->
     find_used_in_expr expr
 	| AssignFieldStmt3 (expr1, expr2) ->
-		Id3Set.union (find_used_in_expr expr1) (find_used_in_expr expr2)
+		StringSet.union (find_used_in_expr expr1) (find_used_in_expr expr2)
 	| MdCallStmt3 expr ->
 		find_used_in_expr expr
 	| ReturnStmt3 var ->
-		Id3Set.singleton var
+		StringSet.singleton var
   | ReturnVoidStmt3 | Label3 _ |
     GoTo3 _ | ReadStmt3 _  ->
-		Id3Set.empty
+		StringSet.empty
 
 let find_not_used (stmt:ir3_stmt): id3_set =
   match stmt with
-  | AssignStmt3 (id, _) -> Id3Set.singleton id
+  | AssignStmt3 (id, _) -> StringSet.singleton id
   | AssignFieldStmt3 (expr, _) -> (find_used_in_expr expr)
-  | _ -> Id3Set.empty
+  | _ -> StringSet.empty
 
 let rec get_liveness_of_basic_block (blk: block) =
   let rec helper (lines: line list) =
@@ -213,8 +214,8 @@ let rec get_liveness_of_basic_block (blk: block) =
         let next_use = (find_used_vars line.stmt) in
         (* e.g. x = x + 1, we remove x from not_live *)
         let not_used = (find_not_used line.stmt) in
-        let diffed = (Id3Set.diff head.live not_used) in
-        let live = Id3Set.union diffed next_use in
+        let diffed = (StringSet.diff head.live not_used) in
+        let live = StringSet.union diffed next_use in
         { line with
           next_use;
           live;
@@ -247,8 +248,8 @@ let get_liveness_of_basic_blocks (blks: (block list)) =
 let empty_block = {
   id = "";
   lines = [];
-  live_in = Id3Set.empty;
-  live_out = Id3Set.empty;
+  live_in = StringSet.empty;
+  live_out = StringSet.empty;
 }
 
 let rec find_jump (fn: (line list)): (ir3_stmt option) =
@@ -289,7 +290,7 @@ let get_flow_graph (blks: (block list)) =
   let all_blocks = [start_block]@blks@[exit_block] in
   let tbl_out = Hashtbl.create (List.length all_blocks) in
   let _ =
-    List.iter (fun blk -> Hashtbl.add tbl_out blk.id Id3Set.empty) all_blocks
+    List.iter (fun blk -> Hashtbl.add tbl_out blk.id StringSet.empty) all_blocks
   in
   let rec join_all_blocks blks: unit =
     match blks with
@@ -304,7 +305,7 @@ let get_flow_graph (blks: (block list)) =
           | Some inst ->
             let entry = Hashtbl.find tbl_out head.id in
             let dest_id = (find_dest_of_jump blks inst).id in
-            let new_set = Id3Set.add dest_id entry in
+            let new_set = StringSet.add dest_id entry in
             Hashtbl.add tbl_out head.id new_set;
           | None -> ()
         ) in
@@ -317,7 +318,7 @@ let get_flow_graph (blks: (block list)) =
             (* Any other type are true *)
             | _ ->
               let entry = Hashtbl.find tbl_out head.id in
-              let new_set = Id3Set.add next.id entry in
+              let new_set = StringSet.add next.id entry in
               Hashtbl.add tbl_out head.id new_set;
         ) in
         join_all_blocks (next::tail);
@@ -327,7 +328,7 @@ let get_flow_graph (blks: (block list)) =
 
 type block_collection = {
   blocks: block list;
-  edges_out: (string, id3_set) Hashtbl.t;
+  edges_out: (block_id, block_id_set) Hashtbl.t;
 }
 
 let prog_to_blocks (prog: ir3_program): block_collection =
