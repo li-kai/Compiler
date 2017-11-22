@@ -73,17 +73,74 @@ Register allocation to variables in a single linear-time scan of
 the variables’ live ranges. The linear scan algorithm is considerably faster than algorithms based on graph coloring, is simple to implement, and results in code that is almost as efficient as that obtained using more complex and time-consuming register allocators based on graph coloring.
 
 
-### Peephole Optimization: 
-Eliminating use of temporary variables. 
+### Peephole Optimization (for IR3): 
+
+#### Eliminating use of temporary variables.
+
+For example:
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t1;
+  Int _t2;
+  Int _t3;
+  _t1=1;
+  _t2=1;
+  _t3=[_t1,_t2](+);
+  x=_t3;
+  Return x;
+}
+```
+
+is transformed to 
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t3;
+  _t3=[1, 1](+);
+  x=_t3;
+  Return x;
+}
+```
+
+#### Strength Reduction
+
 Strength reduction replaces a more expensive operator by a cheaper one example 
 
 
 ```ocaml
 2 * X = X + X
 ```
-Constant folding evaluate constant expressions at compile time and replace the 
-constant expressions by their value.
 
+#### Constant Folding
+
+Constant folding evaluates constant expressions at compile time and replaces them by their value.
+
+For example:
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t3;
+  _t3=[1, 1](+);
+  x=_t3;
+  Return x;
+}
+```
+
+is transformed to 
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t3;
+  _t3=2;
+  x=_t3;
+  Return x;
+}
+```
 
 ## To enable all optimizations
 
@@ -92,7 +149,8 @@ constant expressions by their value.
 ./jlite main [option] armTests/simple.j
 ```
 
-Flags:  
+Flags:
+
 	-O    Enable all optimizations
 
 
