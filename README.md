@@ -44,6 +44,7 @@ docker exec -it proj /bin/bash
 make run
 ```
 
+
 ## How it works
 
 The sequence of constructing the compiler is through the following steps
@@ -56,13 +57,110 @@ The sequence of constructing the compiler is through the following steps
 1. Register Allocation
 1. Arm generation
 
-### Peephole Optimisation
+
+
+## Optimizations
+
 
 ### Register Allocation
 
 As modern cpus have registers that are magnitudes of difference with optimised allocation.
 
 We use a special form of register allocation known as linear scan, following [the 1999 paper](https://www.cs.purdue.edu/homes/suresh/502-Fall2008/papers/linear-scan.pdf) regarding the algorithm.
+
+
+Register allocation to variables in a single linear-time scan of
+the variables’ live ranges. The linear scan algorithm is considerably faster than algorithms based on graph coloring, is simple to implement, and results in code that is almost as efficient as that obtained using more complex and time-consuming register allocators based on graph coloring.
+
+
+### Peephole Optimization (for IR3): 
+
+#### Eliminating use of temporary variables.
+
+For example:
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t1;
+  Int _t2;
+  Int _t3;
+  _t1=1;
+  _t2=1;
+  _t3=[_t1,_t2](+);
+  x=_t3;
+  Return x;
+}
+```
+
+is transformed to 
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t3;
+  _t3=[1, 1](+);
+  x=_t3;
+  Return x;
+}
+```
+
+#### Strength Reduction
+
+Strength reduction replaces a more expensive operator by a cheaper one.
+
+
+```java
+Int twice;
+twice = 2 * X;
+```
+
+is transformed to
+
+```java
+Int twice;
+twice = X + X;
+```
+
+#### Constant Folding
+
+Constant folding evaluates constant expressions at compile time and replaces them by their value.
+
+For example:
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t3;
+  _t3=[1, 1](+);
+  x=_t3;
+  Return x;
+}
+```
+
+is transformed to 
+
+```java
+Int Func(MyClass this) {
+  Int x;
+  Int _t3;
+  _t3=2;
+  x=_t3;
+  Return x;
+}
+```
+
+## To enable all optimizations
+
+```bash
+# after make run
+./jlite main [option] armTests/simple.j
+```
+
+Flags:
+
+	-O    Enable all optimizations
+
 
 ## Notes
 

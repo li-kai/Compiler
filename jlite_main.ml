@@ -38,8 +38,8 @@ let process prog =
     (* print_string (Jlite_structs.string_of_jlite_program typedprog); *)
     let ir3prog = Jlite_toir3.jlite_program_to_IR3 typedprog in
 
-    let ir3prog =  if !optimized then 
-      Optimize_ir3.optimize_prog ir3prog 
+    let ir3prog =  if !optimized then
+      Optimize_ir3.optimize_prog ir3prog
     else
       ir3prog in
 
@@ -47,6 +47,11 @@ let process prog =
 
     let asmprog = Ir3_to_arm.prog_to_arm ir3prog in
     print_string (Arm_structs.string_of_arm_prog asmprog);
+
+    let prog_blocks = Basic_blocks.prog_to_blocks ir3prog in
+
+    let new_basic_blocks = Global_optimization.Liveness_analysis.obtain_new_basic_blocks prog_blocks in
+     print_endline @@ Global_optimization.Liveness_analysis.string_of_new_basic_blocks new_basic_blocks
   end
 let _ =
   begin
