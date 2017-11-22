@@ -74,7 +74,7 @@ the variables’ live ranges. The linear scan algorithm is considerably faster t
 
 
 ### Peephole Optimization: 
-Eliminating use of temporary variables.
+Eliminating use of temporary variables. 
 Strength reduction replaces a more expensive operator by a cheaper one example 
 
 
@@ -92,7 +92,7 @@ constant expressions by their value.
 ./jlite main [option] armTests/simple.j
 ```
 
-Flags:
+Flags:  
 	-O    Enable all optimizations
 
 
