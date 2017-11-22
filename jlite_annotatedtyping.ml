@@ -69,7 +69,7 @@ let initialize (main_class, aux_classes) =
   (process_class (main_class_name, [], [main_class_md_decl])) :: (List.map process_class aux_classes)
 
 let update_method_names (class_name, var_decls, md_decls) =
-  List.iteri (fun idx a -> a.S.ir3id <- S.SimpleVarId ("%" ^ class_name ^ "_" ^ (string_of_int idx))) md_decls
+  List.iteri (fun idx a -> a.S.ir3id <- S.SimpleVarId ("$" ^ class_name ^ "_" ^ (string_of_int idx))) md_decls
 
 let is_assignable_from t1 t2 =
   match t1, t2 with
