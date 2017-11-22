@@ -66,8 +66,17 @@ jlite_main: compile
 
 ############
 run:
-	$(ARM) armTests/test_ops.s -o armTests/test.in --static
-	$(GEM) armTests/test.in --output armTests/test.out
+	$(ARM) armTests/test_ops.arm -o armTests/test.bin --static
+	$(GEM) armTests/test.bin --output armTests/test_ops.out
+	$(DIFF) armTests/test_ops.test armTests/test_ops.out
+
+	$(ARM) armTests/test_print.arm -o armTests/test.bin --static
+	$(GEM) armTests/test.bin --output armTests/test_print.out
+	$(DIFF) armTests/test_print.test armTests/test_print.out
+
+	$(ARM) armTests/telegram.arm -o armTests/test.bin --static
+	$(GEM) armTests/test.bin --output armTests/telegram.out
+	$(DIFF) armTests/telegram.test armTests/telegram.out
 
 ############
 test: jlite_main
