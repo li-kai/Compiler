@@ -7,7 +7,7 @@ type interval = (int * int)
 
 (* Registers available *)
 let no_registers = 5
-let registers = ["v0"; "v1"; "v2"; "v3"; "v4"]
+let registers = ["v1"; "v2"; "v3"; "v4"; "v5"]
 
 type result = {
   id: id3;

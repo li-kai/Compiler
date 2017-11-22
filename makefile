@@ -41,9 +41,6 @@ optimize_ir3.cmo: optimize_ir3.ml
 graph.cmo: graph.ml
 	$(OCAMLC) -c $<
 
-global_optimization.cmo: global_optimization.ml
-	$(OCAMLC) -c $<
-
 jlite_parser.ml: jlite_parser.mli
 	$(OCAMLC) -c $<
 
