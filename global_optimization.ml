@@ -3,7 +3,6 @@ open Graph
 open Basic_blocks
 
 module type Data_flow_analysis = sig
-  type t
   type new_line
   type new_basic_block
   val string_of_new_basic_blocks : new_basic_block list -> string
@@ -21,7 +20,7 @@ module type Data_flow_computation = sig
   val init : t
 end
 
-module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analysis with type t := Dfc.t) = struct
+module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analysis) = struct
   type t = Dfc.t
 
   type new_line =
@@ -144,22 +143,21 @@ module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analy
     Array.to_list new_blocks_arr
 end
 
-module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analysis with type t := Dfc.t) = struct
-  type t = Dfc.t
+module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analysis) = struct
 
   type new_line =
     {
       no: int;
       stmt: Ir3_structs.ir3_stmt;
-      payload: t
+      payload: Dfc.t
     }
 
   type new_basic_block =
     {
       id: Basic_blocks.block_id;
       lines: new_line list;
-      payload_in: t;
-      payload_out: t
+      payload_in: Dfc.t;
+      payload_out: Dfc.t
     }
 
   let string_of_new_line (line: new_line) =
@@ -290,7 +288,7 @@ end
       }
  *)
 
-module Liveness_analysis_computation : Data_flow_computation = struct
+module Liveness_analysis_computation = struct
 
 (*
   Algorithm 8.7: Determining the liveness and next-use
@@ -405,6 +403,3 @@ module Liveness_analysis_computation : Data_flow_computation = struct
 end
 
 module Liveness_analysis = MkBackwardDataFlowAnalysis (Liveness_analysis_computation)
-
-
-

@@ -50,8 +50,8 @@ let process prog =
 
     let prog_blocks = Basic_blocks.prog_to_blocks ir3prog in
 
-    let new_basic_blocks = Global_optimization.Liveness_analysis.obtain_new_basic_blocks prog_blocks in
-     print_endline @@ Global_optimization.Liveness_analysis.string_of_new_basic_blocks new_basic_blocks
+    let new_basic_blocks = Register_allocation.Liveness_analysis.obtain_new_basic_blocks prog_blocks in
+     print_endline @@ Register_allocation.Liveness_analysis.string_of_new_basic_blocks new_basic_blocks
   end
 let _ =
   begin
