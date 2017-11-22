@@ -178,7 +178,9 @@ let optimize_stmt
   | AssignStmt3 (id, e) ->
     begin
       match e with
-      | Idc3Expr (Var3 id) -> []
+      | Idc3Expr (Var3 vid) ->
+        if vid = id then []
+        else [AssignStmt3 (id, e)]
       | _ -> [AssignStmt3 (id, optimize_exp e)]
     end
 
