@@ -542,7 +542,8 @@ let live_interval_from_blocks (blocks: new_basic_block list) adj_list: live_inte
     if not @@ Hashtbl.mem visited_blocks block_id
     then
       let _ = Hashtbl.add visited_blocks block_id true in
-      let block = List.find (fun (x: new_basic_block) -> x.id == block_id) blocks in
+      (* print_string ("Finding block " ^ block_id ^ "\n"); *)
+      let block = List.find (fun (x: new_basic_block) -> x.id = block_id) blocks in
       List.iter process_line block.lines;
 
       let next_blocks = Hashtbl.find adj_list block_id in
