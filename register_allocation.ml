@@ -1,5 +1,6 @@
 open Ir3_structs
-open Basic_blocks
+open Global_optimization
+open Global_optimization.Liveness_analysis
 
 type register = string
 type interval = (int * int)
@@ -118,8 +119,7 @@ let linear_scan (intvs: live_interval list) =
   lsra.result_tbl
 
 (* traverse the list of blocks and keep track of the min live value and mindead value for each id *)
-let live_interval_from_blocks (bc: block_collection) : live_interval list =
-  let blocks = bc.blocks in
+let live_interval_from_blocks (blocks: Liveness_analysis.new_basic_block list) adj_list: live_interval list =
   let visited_blocks = Hashtbl.create 10 in
   let liveness_tbl = Hashtbl.create 10 in
 
@@ -131,18 +131,18 @@ let live_interval_from_blocks (bc: block_collection) : live_interval list =
     else Hashtbl.add liveness_tbl id (line_no, line_no)
   in
 
-  let process_line line =
-    Basic_blocks.StringSet.iter (update_id_liveness line.no) line.live
+  let process_line (line: Liveness_analysis.new_line) =
+    Basic_blocks.StringSet.iter (update_id_liveness line.no) line.payload
   in
 
   let rec preorder_traverse block_id =
     if not @@ Hashtbl.mem visited_blocks block_id
     then
       let _ = Hashtbl.add visited_blocks block_id true in
-      let block = List.find (fun (x:Basic_blocks.block) -> x.id == block_id) blocks in
+      let block = List.find (fun (x:Liveness_analysis.new_basic_block) -> x.id == block_id) blocks in
       List.iter process_line block.lines;
 
-      let next_blocks = Hashtbl.find bc.edges_out block_id in
+      let next_blocks = Hashtbl.find adj_list block_id in
       List.iter preorder_traverse next_blocks
     else ()
   in
