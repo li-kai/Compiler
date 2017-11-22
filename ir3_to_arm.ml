@@ -7,6 +7,9 @@ let labelcount = ref 0
 let fresh_label () =
   (labelcount:= !labelcount + 1; "L" ^ (string_of_int !labelcount))
 
+(* Mapping of id3 to register *)
+let idc3_to_reg = Hashtbl.create 10000
+
 let rec range ?(start=0) len =
   if start >= len
   then []
@@ -99,7 +102,18 @@ let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_dec
     end
   | Var3 v ->
     let offset = offset_of_var md3 v in
-    [], ([LDR ("", "", reg, RegPreIndexed ("fp", -offset, false))], [STR ("", "", reg, RegPreIndexed ("fp", -offset, false))])
+    let reg_pre_indexed = RegPreIndexed ("fp", -offset, false) in
+    let pair = (
+        match Hashtbl.find_opt idc3_to_reg v with
+          | Some "spill" | None ->
+            (* TODO: place in frame pointer but offset how much? *)
+            let spill = RegPreIndexed ("fp", -offset, false) in
+            let bef = [STR ("", "", "v0", spill); LDR ("", "", "v0", reg_pre_indexed)] in
+            let aft = [STR ("", "", "v0", reg_pre_indexed); LDR ("", "", "v0", spill)] in
+            (bef, aft)
+          | Some x -> ([LDR ("", "", x, reg_pre_indexed)], [])
+    ) in
+    [], pair
 
 let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : arm_program * (arm_program * arm_program) =
   let rev_args = List.rev args in
@@ -368,7 +382,8 @@ let rec mds_to_arm
 
 let prog_to_arm
     (prog: ir3_program) : arm_program =
-
+    (* Pass in intervals *)
+  (* let _ = RegisterAllocation.linear_scan prog in *)
   let cdata_list, main_md, md_list = prog in
   let main_data, main_instr = md_to_arm main_md prog in
   let class_data, class_instr = mds_to_arm md_list prog in
