@@ -1,7 +1,7 @@
 ############
 DIFF=/usr/bin/diff -sb
 OCAMLF=/usr/bin/env ocamlfind
-OCAMLC=/usr/bin/env ocamlc
+OCAMLC=/usr/bin/env ocamlc -g
 OCAMLLEX=/usr/bin/env ocamllex
 OCAMLYACC=/usr/bin/env ocamlyacc
 ARM=arm-linux-gnueabi-g++-4.7
