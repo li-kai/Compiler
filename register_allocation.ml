@@ -1,4 +1,5 @@
 open Ir3_structs
+open Basic_blocks
 
 type register = string
 type interval = (int * int)
@@ -114,3 +115,37 @@ let linear_scan (intvs: live_interval list): result list =
     res::acc
   in
   Hashtbl.fold accum_results lsra.result_tbl []
+
+
+(* traverse the list of blocks and keep track of the min live value and mindead value for each id *)
+let live_interval_from_blocks (bc: block_collection) : live_interval list =
+  let blocks = bc.blocks in
+  let visited_blocks = Hashtbl.create 10 in
+  let liveness_tbl = Hashtbl.create 10 in
+
+  let update_id_liveness line_no id =
+    if Hashtbl.mem liveness_tbl id
+    then
+      let min_live, max_live = Hashtbl.find liveness_tbl id in
+      Hashtbl.replace liveness_tbl id (min min_live line_no, max max_live line_no)
+    else Hashtbl.add liveness_tbl id (line_no, line_no)
+  in
+
+  let process_line line =
+    Basic_blocks.StringSet.iter (update_id_liveness line.no) line.live
+  in
+
+  let rec preorder_traverse block_id =
+    if not @@ Hashtbl.mem visited_blocks block_id
+    then
+      let _ = Hashtbl.add visited_blocks block_id true in
+      let block = List.find (fun (x:Basic_blocks.block) -> x.id == block_id) blocks in
+      List.iter process_line block.lines;
+
+      let next_blocks = Hashtbl.find bc.edges_out block_id in
+      List.iter preorder_traverse next_blocks
+    else ()
+  in
+
+  let _ = preorder_traverse "start" in
+  Hashtbl.fold (fun k (v1, v2) acc -> {id=k; intv=(v1, v2)} :: acc) liveness_tbl []
