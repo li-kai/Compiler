@@ -44,6 +44,7 @@ docker exec -it proj /bin/bash
 make run
 ```
 
+
 ## How it works
 
 The sequence of constructing the compiler is through the following steps
@@ -56,13 +57,39 @@ The sequence of constructing the compiler is through the following steps
 1. Register Allocation
 1. Arm generation
 
-### Peephole Optimisation
+
+
+## Optimizations
+
 
 ### Register Allocation
 
 As modern cpus have registers that are magnitudes of difference with optimised allocation.
 
 We use a special form of register allocation known as linear scan, following [the 1999 paper](https://www.cs.purdue.edu/homes/suresh/502-Fall2008/papers/linear-scan.pdf) regarding the algorithm.
+
+
+Register allocation to variables in a single linear-time scan of
+the variables’ live ranges. The linear scan algorithm is considerably faster than algorithms based on graph coloring, is simple to implement, and results in code that is almost as efficient as that obtained using more complex and time-consuming register allocators based on graph coloring.
+
+
+### Peephole Optimization: 
+Eliminating use of temporary variables 
+Strength reduction replaces a more expensive operator by a cheaper one example 
+2 x X = X + X.
+Constant folding evaluate constant expressions at compile time and replace the 
+constant expressions by their value.
+
+
+
+### To enable all optimizations
+
+```bash
+# after make run
+./jlite main [option] armTests/simple.j
+```
+
+-O    Enable all optimizations
 
 ## Notes
 
