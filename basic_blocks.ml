@@ -190,14 +190,11 @@ let find_dest_of_jump (blks: (block list)) (jump) =
   List.find identify_dest blks
 
 let get_flow_graph (blks: (block list)) exit_node =
-  let start_block = { empty_block with id = "start" } in
-  let exit_block = { empty_block with id = "exit" } in
-  let all_blocks = [start_block]@blks@[exit_block] in
-  let tbl_out = Hashtbl.create (List.length all_blocks) in
+  let tbl_out = Hashtbl.create (List.length blks) in
   let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
   let _ = Hashtbl.add tbl_out exit_node.id ["exit"] in
   let _ =
-    List.iter (fun blk -> Hashtbl.add tbl_out blk.id []) all_blocks
+    List.iter (fun blk -> Hashtbl.add tbl_out blk.id []) blks
   in
   let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
   (* let _ = Hashtbl.add tbl_out (List.hd (List.rev blks)).id ["exit"] in *)
@@ -232,7 +229,7 @@ let get_flow_graph (blks: (block list)) exit_node =
         ) in
         join_all_blocks (next::tail);
   in
-  let _ = join_all_blocks all_blocks in
+  let _ = join_all_blocks blks in
   tbl_out
 
 type block_collection = {
@@ -248,9 +245,9 @@ let get_reverse_postorder (g: 'a adj_list) ~entry : 'a list =
   let visited = Hashtbl.create n in
   let rev_postorder = ref [] in
   let rec dfs_rec u =
+    Hashtbl.replace visited u true;
     List.iter (fun v -> if (not (Hashtbl.mem visited v)) then dfs_rec v) (Hashtbl.find g u);
     rev_postorder := u :: !rev_postorder;
-    Hashtbl.replace visited u true;
   in
   dfs_rec entry;
   Hashtbl.iter (fun k _ -> if not(Hashtbl.mem visited k) then dfs_rec k) g;
@@ -270,6 +267,10 @@ let number_lines_of_blk (blk_cl: block_collection): block_collection =
   let find_blk id: block =
     List.find (fun blk -> id = blk.id) blk_cl.blocks
   in
+  if (List.length order_blks_id) != (List.length blk_cl.blocks) then
+    failwith ("Not equal length, traversing " ^ string_of_int (List.length order_blks_id) ^
+    " should give " ^ string_of_int (List.length blk_cl.blocks))
+  else
   let order_blks = List.map find_blk order_blks_id in
   let numbered_order_blks = List.map number_blk order_blks in
   { blk_cl with blocks = numbered_order_blks }
@@ -285,7 +286,10 @@ let prog_to_blocks (prog: ir3_program): block_collection =
   in
   let all_block_blocks = List.map make_block all_methods in
   let exit_node = List.hd(List.rev (List.hd all_block_blocks)) in
-  let all_blocks = List.flatten all_block_blocks in
+  let start_block = { empty_block with id = "start" } in
+  let exit_block = { empty_block with id = "exit" } in
+  let all_blocks = [start_block]@(List.flatten all_block_blocks)@[exit_block] in
+  (* let _ = List.iter (fun b -> print_string (string_of_basic_block b)) all_blocks in *)
   let blk_cl = {
     blocks = all_blocks;
     edges_out = get_flow_graph all_blocks exit_node;
