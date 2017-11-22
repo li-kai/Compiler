@@ -1,5 +1,7 @@
 open Graph
 
+open Basic_blocks
+
 module type Data_flow_analysis = sig
   type t
   type new_line
@@ -24,6 +26,7 @@ module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analy
 
   type new_line =
     {
+      no: int;
       stmt: Ir3_structs.ir3_stmt;
       payload: t
     }
@@ -48,13 +51,13 @@ module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analy
     String.concat "\n\n" (List.map string_of_new_basic_block blk)
 
   let new_default_lines old_lines =
-    List.map (fun line -> {stmt = line.Basic_blocks.stmt; payload = Dfc.boundary}) old_lines
+    List.map (fun line -> {no = line.Basic_blocks.no; stmt = line.Basic_blocks.stmt; payload = Dfc.boundary}) old_lines
 
   let generate_new_block old_block new_payloads new_in =
     let generate_new_lines old_lines payloads =
       let rec aux lst lst2 =
         match lst, lst2 with
-        | hd1::tl1, hd2::tl2 -> { stmt = hd1.stmt; payload = hd2 } :: aux tl1 tl2
+        | hd1::tl1, hd2::tl2 -> { no = hd1.no; stmt = hd1.stmt; payload = hd2 } :: aux tl1 tl2
         | [], [] -> []
         | _, _ -> failwith "They should have the same length"
       in
@@ -72,7 +75,7 @@ module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analy
     }
 
   let old_lines_from_new_lines (new_lines: new_line list) : Basic_blocks.line list =
-    List.map (fun v -> { Basic_blocks.stmt = v.stmt }) new_lines
+    List.map (fun v -> { Basic_blocks.stmt = v.stmt; Basic_blocks.no = v.no }) new_lines
 
   let old_basic_block_from_new_basic_block (new_block: new_basic_block) : Basic_blocks.block =
     {
@@ -80,7 +83,7 @@ module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analy
       Basic_blocks.lines = old_lines_from_new_lines new_block.lines
     }
 
-  let initialize_graph (edges: (string, Basic_blocks.id3_set) Hashtbl.t) (block_map: (string, int) Hashtbl.t) : int Graph.adj_list * int Graph.adj_list =
+  let initialize_graph (edges: (string, Basic_blocks.block_id list) Hashtbl.t) (block_map: (string, int) Hashtbl.t) : int Graph.adj_list * int Graph.adj_list =
     let g : int Graph.adj_list = Hashtbl.create @@ Hashtbl.length block_map in
     let grev : int Graph.adj_list = Hashtbl.create @@ Hashtbl.length block_map in
     (* Create empty adjacency list *)
@@ -88,7 +91,7 @@ module MkForwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_analy
     let () = Hashtbl.iter (fun k _ -> Hashtbl.add grev (Hashtbl.find block_map k) []) block_map in
     let process_edge_entry k v =
       let from_vertex = Hashtbl.find block_map k in
-      Basic_blocks.Id3Set.iter
+      List.iter
         (fun to_block_id ->
            let to_vertex = Hashtbl.find block_map to_block_id in
            Hashtbl.replace g from_vertex (to_vertex :: (Hashtbl.find g from_vertex));
@@ -146,6 +149,7 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_anal
 
   type new_line =
     {
+      no: int;
       stmt: Ir3_structs.ir3_stmt;
       payload: t
     }
@@ -170,14 +174,14 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_anal
     String.concat "\n\n" (List.map string_of_new_basic_block blk)
 
   let new_default_lines old_lines =
-    List.map (fun line -> {stmt = line.Basic_blocks.stmt; payload = Dfc.boundary}) old_lines
+    List.map (fun line -> {no = line.Basic_blocks.no; stmt = line.Basic_blocks.stmt; payload = Dfc.boundary}) old_lines
 
   (* DIFF! *)
   let generate_new_block old_block new_payloads new_out =
     let generate_new_lines old_lines payloads =
       let rec aux lst lst2 =
         match lst, lst2 with
-        | hd1::tl1, hd2::tl2 -> { stmt = hd1.stmt; payload = hd2 } :: aux tl1 tl2
+        | hd1::tl1, hd2::tl2 -> { no = hd1.no; stmt = hd1.stmt; payload = hd2 } :: aux tl1 tl2
         | [], [] -> []
         | _, _ -> failwith "They should have the same length"
       in
@@ -195,7 +199,7 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_anal
     }
 
   let old_lines_from_new_lines (new_lines: new_line list) : Basic_blocks.line list =
-    List.map (fun v -> { Basic_blocks.stmt = v.stmt }) new_lines
+    List.map (fun v -> { Basic_blocks.no = v.no; Basic_blocks.stmt = v.stmt }) new_lines
 
   let old_basic_block_from_new_basic_block (new_block: new_basic_block) : Basic_blocks.block =
     {
@@ -203,7 +207,7 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_anal
       Basic_blocks.lines = old_lines_from_new_lines new_block.lines
     }
 
-  let initialize_graph (edges: (string, Basic_blocks.id3_set) Hashtbl.t) (block_map: (string, int) Hashtbl.t) : int Graph.adj_list * int Graph.adj_list =
+  let initialize_graph (edges: (string, Basic_blocks.block_id list) Hashtbl.t) (block_map: (string, int) Hashtbl.t) : int Graph.adj_list * int Graph.adj_list =
     let g : int Graph.adj_list = Hashtbl.create @@ Hashtbl.length block_map in
     let grev : int Graph.adj_list = Hashtbl.create @@ Hashtbl.length block_map in
     (* Create empty adjacency list *)
@@ -211,9 +215,8 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_anal
     let () = Hashtbl.iter (fun k _ -> Hashtbl.add grev (Hashtbl.find block_map k) []) block_map in
     Hashtbl.iter (fun k v -> print_endline @@ "Got " ^ k ^ " -> " ^ (string_of_int v)) block_map;
     let process_edge_entry k v =
-      print_endline @@ "EDGE ENTRY " ^ k ^ " " ^ (String.concat ", " (Basic_blocks.Id3Set.elements v));
       let from_vertex = Hashtbl.find block_map k in
-      Basic_blocks.Id3Set.iter
+      List.iter
         (fun to_block_id ->
            let to_vertex = Hashtbl.find block_map to_block_id in
            Hashtbl.replace g from_vertex (to_vertex :: (Hashtbl.find g from_vertex));
@@ -269,14 +272,6 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) : (Data_flow_anal
     Array.to_list new_blocks_arr
 end
 
-module Id3Set = Set.Make(
-  struct
-    let compare = String.compare
-    type t = Ir3_structs.id3
-  end
-  );;
-type id3_set = Id3Set.t
-
 (*
   Algorithm 9.14 Live-variable analysis
 
@@ -319,31 +314,31 @@ module Liveness_analysis_computation : Data_flow_computation = struct
 
   let find_used_in_idc3 (var_id: Ir3_structs.idc3): id3_set =
     match var_id with
-    | Ir3_structs.Var3 v -> Id3Set.singleton v
-    | Ir3_structs.IntLiteral3 _ | Ir3_structs.BoolLiteral3 _ | Ir3_structs.StringLiteral3 _ -> Id3Set.empty
+    | Ir3_structs.Var3 v -> StringSet.singleton v
+    | Ir3_structs.IntLiteral3 _ | Ir3_structs.BoolLiteral3 _ | Ir3_structs.StringLiteral3 _ -> StringSet.empty
 
   let rec find_used_in_idc3_list (var_id_list: Ir3_structs.idc3 list): id3_set =
     match var_id_list with
     | head::tail ->
-      Id3Set.union (find_used_in_idc3 head) (find_used_in_idc3_list tail)
+      StringSet.union (find_used_in_idc3 head) (find_used_in_idc3_list tail)
     | [] ->
-      Id3Set.empty
+      StringSet.empty
 
   (* returns the variables used in an ir3 expression *)
   let rec find_used_in_expr (expr:Ir3_structs.ir3_exp): id3_set =
     match expr with
     | Ir3_structs.BinaryExp3 (_, a, b) ->
-      Id3Set.union (find_used_in_idc3 a) (find_used_in_idc3 b)
+      StringSet.union (find_used_in_idc3 a) (find_used_in_idc3 b)
     | Ir3_structs.UnaryExp3 (_, a) ->
       (find_used_in_idc3 a)
     | Ir3_structs.FieldAccess3 (obj, _) ->
-      Id3Set.singleton obj
+      StringSet.singleton obj
     | Ir3_structs.Idc3Expr a ->
       (find_used_in_idc3 a)
     | Ir3_structs.MdCall3 (_, var_list) ->
       (find_used_in_idc3_list var_list)
     | Ir3_structs.ObjectCreate3 _ ->
-      Id3Set.empty
+      StringSet.empty
 
   (* returns the list of the variables used in a statement *)
   let find_used_vars (stmt:Ir3_structs.ir3_stmt): id3_set =
@@ -355,20 +350,20 @@ module Liveness_analysis_computation : Data_flow_computation = struct
     | Ir3_structs.AssignStmt3 (_, expr) ->
       find_used_in_expr expr
     | Ir3_structs.AssignFieldStmt3 (expr1, expr2) ->
-      Id3Set.union (find_used_in_expr expr1) (find_used_in_expr expr2)
+      StringSet.union (find_used_in_expr expr1) (find_used_in_expr expr2)
     | Ir3_structs.MdCallStmt3 expr ->
       find_used_in_expr expr
     | Ir3_structs.ReturnStmt3 var ->
-      Id3Set.singleton var
+      StringSet.singleton var
     | Ir3_structs.ReturnVoidStmt3 | Ir3_structs.Label3 _ |
       Ir3_structs.GoTo3 _ | Ir3_structs.ReadStmt3 _  ->
-      Id3Set.empty
+      StringSet.empty
 
   let find_not_used (stmt:Ir3_structs.ir3_stmt): id3_set =
     match stmt with
-    | Ir3_structs.AssignStmt3 (id, _) -> Id3Set.singleton id
+    | Ir3_structs.AssignStmt3 (id, _) -> StringSet.singleton id
     | Ir3_structs.AssignFieldStmt3 (expr, _) -> (find_used_in_expr expr)
-    | _ -> Id3Set.empty
+    | _ -> StringSet.empty
 
   let rec get_liveness_of_basic_block (blk: Basic_blocks.block) (init: id3_set) =
     let rec helper (lines: Basic_blocks.line list) =
@@ -384,8 +379,8 @@ module Liveness_analysis_computation : Data_flow_computation = struct
           let next_use = (find_used_vars line.Basic_blocks.stmt) in
           (* e.g. x = x + 1, we remove x from not_live *)
           let not_used = (find_not_used line.Basic_blocks.stmt) in
-          let diffed = (Id3Set.diff head not_used) in
-          let live = Id3Set.union diffed next_use in
+          let diffed = (StringSet.diff head not_used) in
+          let live = StringSet.union diffed next_use in
           live::computed
     in
     helper blk.Basic_blocks.lines
@@ -394,9 +389,9 @@ module Liveness_analysis_computation : Data_flow_computation = struct
   type t = id3_set
 
   let string_of_t (set: t) =
-    String.concat ", " (Id3Set.elements set)
+    String.concat ", " (StringSet.elements set)
 
-  let boundary = Id3Set.empty
+  let boundary = StringSet.empty
   let init = boundary
   let transfer init block = get_liveness_of_basic_block block init
   let meet lst =
@@ -406,7 +401,7 @@ module Liveness_analysis_computation : Data_flow_computation = struct
         | hd::tl -> hd, tl
         | [] -> failwith "Impossible"
       in
-      List.fold_left (fun a b -> Id3Set.inter a b) hd tl
+      List.fold_left (fun a b -> StringSet.inter a b) hd tl
 end
 
 module Liveness_analysis = MkBackwardDataFlowAnalysis (Liveness_analysis_computation)
