@@ -9,6 +9,7 @@ open Jlite_toir3
 open Optimize_ir3
 
 let source_files = ref []
+let optimized = ref false
 
 let usage_msg = Sys.argv.(1) ^ " <source files>"
 
@@ -27,21 +28,29 @@ let parse_file file_name =
   with
 	End_of_file -> exit 0
 
+
+let speclist = [("-O", Arg.Set optimized, "Enables all optimizations");]
+
 let process prog =
   begin
     (* print_string (Jlite_structs.string_of_jlite_program prog); *)
     let typedprog= (Jlite_annotatedtyping.type_check_jlite_program prog) in
     (* print_string (Jlite_structs.string_of_jlite_program typedprog); *)
     let ir3prog = Jlite_toir3.jlite_program_to_IR3 typedprog in
-    let optimized_ir3prog = Optimize_ir3.optimize_prog ir3prog in
-    print_string (Ir3_structs.string_of_ir3_program optimized_ir3prog);
 
-    let asmprog = Ir3_to_arm.prog_to_arm optimized_ir3prog in
+    let ir3prog =  if !optimized then 
+      Optimize_ir3.optimize_prog ir3prog 
+    else
+      ir3prog in
+
+    print_string (Ir3_structs.string_of_ir3_program ir3prog);
+
+    let asmprog = Ir3_to_arm.prog_to_arm ir3prog in
     print_string (Arm_structs.string_of_arm_prog asmprog);
   end
 let _ =
   begin
-	Arg.parse [] set_source_file usage_msg ;
+	Arg.parse speclist (fun x -> source_files:=!source_files@[x]) usage_msg;
     match !source_files with
     | [] -> print_string "no file provided \n"
     | x::_->
