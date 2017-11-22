@@ -74,15 +74,18 @@ the variables’ live ranges. The linear scan algorithm is considerably faster t
 
 
 ### Peephole Optimization: 
-Eliminating use of temporary variables 
+Eliminating use of temporary variables.
 Strength reduction replaces a more expensive operator by a cheaper one example 
-2 x X = X + X.
+
+
+```ocaml
+2 * X = X + X
+```
 Constant folding evaluate constant expressions at compile time and replace the 
 constant expressions by their value.
 
 
-
-### To enable all optimizations
+## To enable all optimizations
 
 ```bash
 # after make run
