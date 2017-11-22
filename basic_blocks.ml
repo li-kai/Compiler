@@ -189,11 +189,13 @@ let find_dest_of_jump (blks: (block list)) (jump) =
   in
   List.find identify_dest blks
 
-let get_flow_graph (blks: (block list)) =
+let get_flow_graph (blks: (block list)) exit_node =
   let start_block = { empty_block with id = "start" } in
   let exit_block = { empty_block with id = "exit" } in
   let all_blocks = [start_block]@blks@[exit_block] in
   let tbl_out = Hashtbl.create (List.length all_blocks) in
+  let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
+  let _ = Hashtbl.add tbl_out exit_node.id ["exit"] in
   let _ =
     List.iter (fun blk -> Hashtbl.add tbl_out blk.id []) all_blocks
   in
@@ -281,10 +283,11 @@ let prog_to_blocks (prog: ir3_program): block_collection =
     | [] -> []
     | hd::tail -> { hd with id = mthd.id3 }::tail
   in
-  let all_blocks = List.flatten (List.map make_block all_methods) in
+  let all_block_blocks = List.map make_block all_methods in
+  let exit_node = List.hd(List.rev (List.hd all_block_blocks)) in
+  let all_blocks = List.flatten all_block_blocks in
   let blk_cl = {
     blocks = all_blocks;
-    edges_out = get_flow_graph all_blocks;
+    edges_out = get_flow_graph all_blocks exit_node;
   }
   in number_lines_of_blk blk_cl
-
