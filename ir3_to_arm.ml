@@ -84,36 +84,36 @@ let get_var_type (vname: Ir3_structs.id3) (md3: Ir3_structs.md_decl3) : Ir3_stru
   in
   aux (md3.Ir3_structs.localvars3 @ md3.Ir3_structs.params3)
 
-let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_decl3) : arm_program * (arm_program * arm_program) =
+let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_decl3) : arm_program * (arm_program * arm_program) * string =
   match idc3 with
-  | IntLiteral3 i -> [], ([MOV ("", false, reg, immediate_int i)], [])
+  | IntLiteral3 i -> [], ([MOV ("", false, reg, immediate_int i)], []), reg
   | BoolLiteral3 b ->
     begin
       match b with
-      | true -> [], ([MOV ("", false, reg, immediate_int 1)], [])
-      | false -> [], ([MOV ("", false, reg, immediate_int 0)], [])
+      | true -> [], ([MOV ("", false, reg, immediate_int 1)], []), reg
+      | false -> [], ([MOV ("", false, reg, immediate_int 0)], []), reg
     end
   | StringLiteral3 s ->
     begin
       let label_str = fresh_label () in
       let lbl_instr = [PseudoInstr (label_str^":"); PseudoInstr (".asciz \"" ^ s ^ "\"")] in
       let load_instr = LDR ("", "", reg, LabelAddr ("="^label_str)) in
-      lbl_instr, ([load_instr], [])
+      lbl_instr, ([load_instr], []), reg
     end
   | Var3 v ->
     let offset = offset_of_var md3 v in
     let reg_pre_indexed = RegPreIndexed ("fp", -offset, false) in
-    let pair = (
+    let pair, reg = (
         match Hashtbl.find_opt idc3_to_reg v with
           | Some "spill" | None ->
             (* TODO: place in frame pointer but offset how much? *)
             let spill = RegPreIndexed ("fp", -offset, false) in
-            let bef = [STR ("", "", "v0", spill); LDR ("", "", "v0", reg_pre_indexed)] in
-            let aft = [STR ("", "", "v0", reg_pre_indexed); LDR ("", "", "v0", spill)] in
-            (bef, aft)
-          | Some x -> ([LDR ("", "", x, reg_pre_indexed)], [])
+            let bef = [STR ("", "", reg, spill); LDR ("", "", reg, reg_pre_indexed)] in
+            let aft = [STR ("", "", reg, reg_pre_indexed); LDR ("", "", reg, spill)] in
+            (bef, aft), reg
+          | Some x -> ([LDR ("", "", x, reg_pre_indexed)], []), x
     ) in
-    [], pair
+    [], pair, reg
 
 let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : arm_program * (arm_program * arm_program) =
   let rev_args = List.rev args in
@@ -128,11 +128,11 @@ let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : 
     | hd::tl ->
       let init, current_instr =
         if idx < 4 then
-          let init, (bef, aft) = convert_idc3 hd ("a"^(string_of_int (idx+1))) md3 in
+          let init, (bef, aft), reg = convert_idc3 hd ("a"^(string_of_int (idx+1))) md3 in
           init, bef
         else
-          let init, (bef, aft) = convert_idc3 hd "a1" md3 in
-          init, bef @ [STR ("", "", "v1", RegPreIndexed ("sp", 4 * (idx - 4), false))] @ aft
+          let init, (bef, aft), reg = convert_idc3 hd "a1" md3 in
+          init, bef @ [STR ("", "", reg, RegPreIndexed ("sp", 4 * (idx - 4), false))] @ aft
       in
       let rest_init, rest_instr = (aux (idx-1) tl) in
       (init @ rest_init, current_instr @ rest_instr)
@@ -145,54 +145,54 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
   match expr with
   | BinaryExp3 (op, lhs, rhs) ->
     begin
-      let init1, (bef1, aft1) = convert_idc3 lhs "a1" md3 in
-      let init2, (bef2, aft2) = convert_idc3 rhs "a2" md3 in
+      let init1, (bef1, aft1), reg1 = convert_idc3 lhs "a1" md3 in
+      let init2, (bef2, aft2), reg2 = convert_idc3 rhs "a2" md3 in
       match op, lhs, rhs with
       | Jlite_structs.BooleanOp op, x, y ->
         begin
           match op with
-          | "||" -> init1 @ init2, bef1 @ bef2 @ [ORR ("", false, "a1", "a1", RegOp ("a2"))]
-          | "&&" -> init1 @ init2, bef1 @ bef2 @ [AND ("", false, "a1", "A1", RegOp ("a2"))]
+          | "||" -> init1 @ init2, bef1 @ bef2 @ [ORR ("", false, "a1", reg1, RegOp (reg2))]
+          | "&&" -> init1 @ init2, bef1 @ bef2 @ [AND ("", false, "a1", reg1, RegOp (reg2))]
           | _ -> failwith "Unknown BooleanOp"
         end
       | Jlite_structs.AritmeticOp op, x, y ->
         begin
           match op with
-          | "+" -> init1 @ init2, bef1 @ bef2 @ [ADD ("", false, "a1", "a1", RegOp ("a2"))]
-          | "-" -> init1 @ init2, bef1 @ bef2 @ [SUB ("", false, "a1", "a1", RegOp ("a2"))]
-          | "*" -> init1 @ init2, bef1 @ bef2 @ [MUL ("", false, "a3", "a1", "a2"); MOV ("", false, "a1", RegOp ("a3"))]
+          | "+" -> init1 @ init2, bef1 @ bef2 @ [ADD ("", false, "a1", reg1, RegOp (reg2))]
+          | "-" -> init1 @ init2, bef1 @ bef2 @ [SUB ("", false, "a1", reg1, RegOp (reg2))]
+          | "*" -> init1 @ init2, bef1 @ bef2 @ [MUL ("", false, "a3", reg1, reg2); MOV ("", false, "a1", RegOp ("a3"))]
           | _ -> failwith "Unknown AritmeticOp"
         end
       | Jlite_structs.RelationalOp op, x, y ->
         begin
           match op with
           | "==" ->
-            let prog = CMP ("", "a1", RegOp "a2") ::
+            let prog = CMP ("", reg1, RegOp reg2) ::
                        MOV ("EQ", false, "a1", immediate_int 1) ::
                        MOV ("NE", false, "a1", immediate_int 0) :: [] in
             init1 @ init2 , bef1 @ bef2 @ prog
           | "!=" ->
-            let prog = CMP ("", "a1", RegOp "a2") ::
+            let prog = CMP ("", reg1, RegOp reg2) ::
                        MOV ("NE", false, "a1", immediate_int 1) ::
                        MOV ("EQ", false, "a1", immediate_int 0) :: [] in
             init1 @ init2 , bef1 @ bef2 @ prog
           | ">" ->
-            let prog = CMP ("", "a1", RegOp "a2") ::
+            let prog = CMP ("", reg1, RegOp reg2) ::
                        MOV ("GT", false, "a1", immediate_int 1) ::
                        MOV ("LE", false, "a1", immediate_int 0) :: [] in
             init1 @ init2 , bef1 @ bef2 @ prog
           | "<" ->
-            let prog = CMP ("", "a1", RegOp "a2") ::
+            let prog = CMP ("", reg1, RegOp reg2) ::
                        MOV ("LT", false, "a1", immediate_int 1) ::
                        MOV ("GE", false, "a1", immediate_int 0) :: [] in
             init1 @ init2 , bef1 @ bef2 @ prog
           | ">=" ->
-            let prog = CMP ("", "a1", RegOp "a2") ::
+            let prog = CMP ("", reg1, RegOp reg2) ::
                        MOV ("GE", false, "a1", immediate_int 1) ::
                        MOV ("LT", false, "a1", immediate_int 0) :: [] in
             init1 @ init2 , bef1 @ bef2 @ prog
           | "<=" ->
-            let prog = CMP ("", "a1", RegOp "a2") ::
+            let prog = CMP ("", reg1, RegOp reg2) ::
                        MOV ("LE", false, "a1", immediate_int 1) ::
                        MOV ("GT", false, "a1", immediate_int 0) :: [] in
             init1 @ init2 , bef1 @ bef2 @ prog
@@ -204,15 +204,15 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
     begin
       match op, operand with
       | Jlite_structs.UnaryOp "-", x ->
-        let init, (bef, aft) = convert_idc3 x "a1" md3 in
-        init, bef @ [RSB ("", false, "a1", "a1", immediate_int 0)]
+        let init, (bef, aft), reg = convert_idc3 x "a1" md3 in
+        init, bef @ [RSB ("", false, "a1", reg, immediate_int 0)]
       | Jlite_structs.UnaryOp "!", x ->
-        let init, (bef, aft) = convert_idc3 x "a1" md3 in
-        init, bef @ [EOR ("", false, "a1", "a1", immediate_int 1)]
+        let init, (bef, aft), reg = convert_idc3 x "a1" md3 in
+        init, bef @ [EOR ("", false, "a1", reg, immediate_int 1)]
       | _, _ -> failwith "Invalid UnaryExp3"
     end
   | FieldAccess3 (vname, fname) ->
-    let init, (bef, aft) = convert_idc3 (Var3 vname) "a2" md3 in
+    let init, (bef, aft), reg = convert_idc3 (Var3 vname) "a2" md3 in
     let var_type = get_var_type vname md3 in
     let class_name =
       match var_type with
@@ -220,10 +220,11 @@ let expr_to_arm (expr: Ir3_structs.ir3_exp) (md3: Ir3_structs.md_decl3) (ir3_pro
       | _ -> failwith "Calling FieldAccess invalid object"
     in
     let field_offset = offset_of_class_field ir3_program class_name fname in
-    init, bef @ [LDR ("", "", "a1", RegPreIndexed ("a2", -field_offset, false))]
+    init, bef @ [LDR ("", "", "a1", RegPreIndexed (reg, -field_offset, false))]
   | Idc3Expr idc3 ->
-    let init, (bef, aft) = convert_idc3 idc3 "a1" md3 in
-    init, bef
+    let init, (bef, aft), reg = convert_idc3 idc3 "a1" md3 in
+    if reg <> "a1" then init, bef @ [MOV ("", false, "a1", RegOp reg)]
+    else init, bef
   | MdCall3 (mname, args) ->
     let init, (prep, cleanup) = prepare_md_call args md3 in
     init, prep @ [BL ("", mname)] @ cleanup
