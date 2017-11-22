@@ -4,9 +4,9 @@ class Main {
 		Int res;
 
 		f = new Facto();
-		res = f.fact(1);
+		res = f.fact(10);
 
-		println("");		
+		println(res);		
 
 
 		return;

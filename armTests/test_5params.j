@@ -1,6 +1,6 @@
 class Main {
 
-	void main(){
+	Void main(){
 		Int a; 
 		Compute help;
 		
@@ -15,9 +15,6 @@ class Main {
 
 class Compute {
 
-	Int x;
-	Int y;
-	Int z;
 
    Int add(Int a, Int b, Int c, Int d, Int e){
      return (a + b + c + d + e);

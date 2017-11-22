@@ -4,7 +4,7 @@ class Main {
 		Int res;
 
 		f = new Fibo();
-		res = f.fib(1);
+		res = f.fib(6);
 
 		println("");		
 

@@ -1,8 +1,7 @@
 class Main {
 	Void main () {
 
-
-		println("");		
+		println("Hello World");		
 
 		return;
 	}
