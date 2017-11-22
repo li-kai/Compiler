@@ -44,6 +44,26 @@ docker exec -it proj /bin/bash
 make run
 ```
 
+## How it works
+
+The sequence of constructing the compiler is through the following steps
+
+1. Basic block construction
+1. Flow graph
+1. Liveness analysis
+1. Global liveness analysis
+1. Peephole
+1. Register Allocation
+1. Arm generation
+
+### Peephole Optimisation
+
+### Register Allocation
+
+As modern cpus have registers that are magnitudes of difference with optimised allocation.
+
+We use a special form of register allocation known as linear scan, following [the 1999 paper](https://www.cs.purdue.edu/homes/suresh/502-Fall2008/papers/linear-scan.pdf) regarding the algorithm.
+
 ## Notes
 
 There are some test cases available in the directory "armTests". In this directory, we provide the test cases (files end with extension "j"), and sample compiled assembly codes (files end with extension "s"). However,

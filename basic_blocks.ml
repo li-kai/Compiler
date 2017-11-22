@@ -297,6 +297,8 @@ let get_flow_graph (blks: (block list)) =
   let _ =
     List.iter (fun blk -> Hashtbl.add tbl_out blk.id []) all_blocks
   in
+  let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
+  (* let _ = Hashtbl.add tbl_out (List.hd (List.rev blks)).id ["exit"] in *)
   let rec join_all_blocks blks: unit =
     match blks with
     | [] -> ();
@@ -328,7 +330,7 @@ let get_flow_graph (blks: (block list)) =
         ) in
         join_all_blocks (next::tail);
   in
-  let _ = join_all_blocks blks in
+  let _ = join_all_blocks all_blocks in
   tbl_out
 
 type block_collection = {
