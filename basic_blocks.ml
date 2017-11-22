@@ -178,10 +178,12 @@ let find_dest_of_jump (blks: (block list)) (jump) =
     | IfStmt3 (_, lb) -> string_of_int lb
     | _ -> failwith "Unknown jump type"
   in
+  print_endline ("TARGET: " ^ target);
   let identify_dest blk =
     match blk.lines with
     | [] -> false
     | hd::tail -> (
+        print_endline ("HEAD: " ^ string_of_ir3_stmt hd.stmt);
         match hd.stmt with
         | (Label3 label) -> (string_of_int label) = target
         | _ -> blk.id = target
@@ -198,8 +200,9 @@ let get_flow_graph (blks: (block list)) exit_node =
   in
   let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
   (* let _ = Hashtbl.add tbl_out (List.hd (List.rev blks)).id ["exit"] in *)
-  let rec join_all_blocks blks: unit =
-    match blks with
+  List.iter (fun blk -> print_endline (string_of_basic_block blk)) blks;
+  let rec join_all_blocks sub_blks: unit =
+    match sub_blks with
     | [] -> ();
     | exit::[] -> ();
     | head::next::tail ->
@@ -209,6 +212,7 @@ let get_flow_graph (blks: (block list)) exit_node =
         let _ = (
           match jump with
           | Some inst ->
+            print_endline ("jump is " ^ string_of_ir3_stmt inst);
             let entry = Hashtbl.find tbl_out head.id in
             let dest_id = (find_dest_of_jump blks inst).id in
             if not(List.mem dest_id entry) then
