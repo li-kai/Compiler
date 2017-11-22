@@ -1,613 +1,443 @@
+module R = Jlite_report
+module S = Jlite_structs
+module Dup_check = Jlite_duplicate_check
 
-(* ===================================================== *)
-(* ============== CS41212 Compiler Design ============== *)
-(* 			  TypeChecking of Jlite programs 			 *)
-(* ===================================================== *)
+open S
+   
+type local_environment = (string * S.jlite_type) list
 
-open Jlite_structs
+type field_declaration = string * S.jlite_type
 
-(* Compare two types *) 	
-let compare_jlite_types 
-	(t1:jlite_type) (t2:jlite_type) = 
-	match t1,t2 with 
-	| (ObjectT name1), (ObjectT "null") -> true
-	| (ObjectT name1), (ObjectT name2) -> 
-		((String.compare name1 name2) == 0) 
-	| t1, t2 -> t1 == t2
-	
-(* Compare two variable ids *) 	
-let compare_var_ids v1 v2 =
-	match v1,v2 with
-	| SimpleVarId id1, SimpleVarId id2 -> 
-		((String.compare id1 id2) == 0)
-	| SimpleVarId id1, TypedVarId (id2,t,s) -> 
-		((String.compare id1 id2) == 0)	
-	| TypedVarId (id1,t,s), SimpleVarId id2 -> 
-		((String.compare id1 id2) == 0)		
-	| TypedVarId (id1,t1,s1), TypedVarId (id2,t2 ,s2) ->
-		((String.compare id1 id2) == 0) && (s1 == s2)
-		
-(* Find the declared type of a variable *) 		
-let rec find_var_decl_type 
-	(vlst: var_decl list) (vid:var_id) =
-  match vlst with
-    | [] -> (Unknown, SimpleVarId "") 
-    | (t,v)::tail_lst -> 
-		if (compare_var_ids v vid) 
-		then (t,v) 
-		else (find_var_decl_type tail_lst vid)
+type method_signature = string * (S.jlite_type * (S.jlite_type list))
 
-(* Check if a variable id exists *) 		
-let exists_var_id 
-	(vlst: var_decl list) (vid: var_id) : bool =
-	let is_eq_id ((t,v): var_decl):bool =
-		(compare_var_ids v vid) 
-	in (List.exists is_eq_id vlst) 	
+type class_descriptor = (string * ((field_declaration list) * (method_signature list))) list
 
-(* Check if a list of variable declarations has duplicates *) 	
-let rec find_duplicate_var_decl 
-	(vlst: var_decl list) =
-  match vlst with
+type type_environment = class_descriptor * local_environment
+
+let string_of_method_signature (name, (rettype, params_type)) =
+  let string_of_params_type = String.concat ", " @@ List.map S.string_of_jlite_type params_type in
+  (S.string_of_jlite_type rettype) ^ " " ^ name ^ " (" ^ string_of_params_type ^ ")"
+                          
+let local_env_lookup local_env id =
+  let rec aux lst =
+    match lst with
+    | (v, t, scope) :: tl -> if v = id then Some t, scope
+                             else aux tl
+    | [] -> None, -1
+  in
+  aux local_env
+
+let local_env_aug local_env id t scope = (id, t, scope) :: local_env
+
+let find_opt (pred: 'a -> bool) (lst: 'a list) : 'a option =
+  let rec aux lst =
+    match lst with
+    | hd :: tl -> if pred hd then Some hd else aux tl
     | [] -> None
-    | (typ,vid)::tail_lst -> 
-		if exists_var_id tail_lst vid
-		then Some vid
-		else (find_duplicate_var_decl tail_lst)		
+  in
+  aux lst
 
-(* Check if the declaration of a class exists *) 			  
-let exists_class_decl 
-	((cm,clst): jlite_program) (cid:class_name) =
-	let rec helper clst =
-		match clst with
-		| [] -> false 
-		| (cname,cvars,cmthd)::tail_lst -> 
-			if ((String.compare cname cid) = 0) 
-				then true
-				else ( helper tail_lst)
-	in ( helper clst) 
+let find_all (pred: 'a -> bool) (lst: 'a list) : 'a list =
+  let rec aux lst acc =
+    match lst with
+    | hd :: tl -> if pred hd then aux tl (hd :: acc)
+                  else aux tl acc
+    | [] -> List.rev acc
+  in
+  aux lst []
 
-(* Find the declaration of a class *) 
-let find_class_decl 
-	((cm,clst): jlite_program) (cid:class_name) =
-	let rec helper clst =
-		match clst with
-		| [] -> None
-		| (cname,cvars,cmthd)::tail_lst -> 
-			if ((String.compare cname cid) = 0) 
-				then (Some (cname,cvars,cmthd)) 
-				else ( helper tail_lst)
-	in ( helper clst) 
+let assoc_opt (key: 'a) (lst: ('a * 'b) list) : 'b option =
+  let rec aux lst =
+    match lst with
+    | (k, v) :: tl -> if key = k then Some v else aux tl
+    | [] -> None
+  in
+  aux lst
 
-(* Compare a declared variable type against a given type *)
-let compare_param_decl_type 
-	((vt,vid):var_decl) (t:jlite_type) =
-	(compare_jlite_types vt t)
+let force_TypedExp e =
+  match e with
+  | S.TypedExp (te, t) -> (te, t)
+  | _ -> failwith @@ "Expected TypedExp. Got " ^ (S.string_of_jlite_expr e)
 
-(* Check if a method exists *) 
-let find_method_decl_type 
-	(p: jlite_program) 
-	(calleecls:class_name) 
-	(calleeid:var_id) 
-	(calleetypes: jlite_type list) =
-	match (find_class_decl p calleecls) with
-	| None -> failwith "Cannot Find method"
-	| Some (cname,cvars,cmthd) -> 
-		let rec helper mthdlst =
-		match mthdlst with
-		| [] -> failwith 
-			("Cannot find method:" 
-			^ string_of_var_id calleeid 
-			^ " in class:" ^ calleecls ) 
-		| mthd::tail_lst -> 
-			if (compare_var_ids mthd.jliteid calleeid) 
-			then if ((List.length mthd.params) 
-					  == (List.length calleetypes)) 
-				then if (List.for_all2 
-						compare_param_decl_type 
-						mthd.params calleetypes
-						) 
-					then (mthd.ir3id,mthd.rettype)
-					else ( helper tail_lst)
-				else ( helper tail_lst)
-			else ( helper tail_lst)
-		in ( helper cmthd)
-	
-(* Check if a field exist *)	
-let find_field 
-	(p: jlite_program) 
-	(cls:class_name) 
-	(fieldid:var_id) =
-	match (find_class_decl p cls) with
-	| None -> Unknown
-	| Some (cname,cvars,cmthd) -> 
-		let rec  helper flst :jlite_type =
-			match flst with
-			| [] -> Unknown 
-			| (ftype,fid)::tail_lst -> 
-				if (compare_var_ids fid fieldid) 
-				then ftype
-				else ( helper tail_lst)
-		in helper cvars
+let initialize (main_class, aux_classes) =
+  let process_class (class_name, var_decls, md_decls) =
+    let fds = List.map (fun (typ, id) -> (S.string_of_var_id id, typ)) var_decls in
+    let msigs = List.map (fun md_dec -> (S.string_of_var_id md_dec.S.jliteid, (md_dec.S.rettype, List.map (fun (typ, id) -> typ) md_dec.S.params))) md_decls in
+    (class_name, (fds, msigs))
+  in
+  let (main_class_name, main_class_md_decl):(S.class_name * S.md_decl) = main_class in
+  (process_class (main_class_name, [], [main_class_md_decl])) :: (List.map process_class aux_classes)
 
-(* Annotate a list of variable declarations with their scope *)	
-let rec create_scoped_var_decls
-	(vlst: var_decl list) (scope:int) =
-	let helper ((vt,vid):var_decl) =
-		match vid with
-		| SimpleVarId id -> 
-			(vt, TypedVarId (id, vt, scope))
-		| TypedVarId (id,t,s) -> 
-			(vt,TypedVarId (id, vt, scope))
-	in (List.map helper vlst)
+let update_method_names (class_name, var_decls, md_decls) =
+  List.iteri (fun idx a -> a.S.ir3id <- S.SimpleVarId ("%" ^ class_name ^ "_" ^ (string_of_int idx))) md_decls
 
-  
-(* Type check a list of variable declarations 
-  1) Determine if all object types exist
-  2) Find and return duplicate variable names	
-*)  
-let rec type_check_var_decl_list
-	(p: jlite_program) 
-	(vlst: var_decl list) =
-	let rec helper 
-		(vlst: var_decl list) :jlite_type list =
-		match vlst with
-		| [] -> []
-		| (typ,vid)::tail_lst -> 
-			match typ with
-			| ObjectT cname -> 
-				if (exists_class_decl p cname) 
-					then ( helper tail_lst) 
-					else typ::( helper tail_lst) 
-			| _ -> ( helper tail_lst) 
-	in match ( helper vlst) with
-		| [] -> 
-			begin
-			match (find_duplicate_var_decl vlst) with
-			| Some a -> 
-				(false,("Duplicate variable name:" 
-						^ string_of_var_id a))
-			| None -> (true,"")
-			end
-		| lst -> (false, ("Undefined types: " 
-				^ (string_of_list lst string_of_jlite_type ",")))
+let is_assignable_from t1 t2 =
+  match t1, t2 with
+  | ObjectT _, Unknown -> true
+  | StringT, Unknown -> true
+  | _, _ -> t1 = t2
 
- 
-(* Compare the parameter type signatures of two methods *)
-let equal_md_param_signatures 
-	(md1lst:var_decl list) (md2lst:var_decl list) =
-	if ((List.length md1lst) == (List.length md2lst)) 
-	then (List.for_all2 
-			(fun (t1,v1) (t2,v2) -> compare_jlite_types t1 t2) 
-			md1lst md2lst
-		 )
-	else false
-	
-(* Type check a list of method declarations 
-  1) Determine if there is illegal overloading
-  2) Find and return overloaded method names	
-*)  
-let rec type_check_md_decl_list
-	(classid: class_name)
-	(mdlst: md_decl list) =
-	let rec helper 
-		(mlst: md_decl list) 
-		(count: int) =
-		match mlst with
-		| [] -> []
-		| md::tail_lst -> 
-			md.ir3id <- SimpleVarId ("$" ^ classid ^ "_" ^ string_of_int count);
-			if (List.for_all
-				(fun md1 -> 
-					not ((compare_var_ids md.jliteid md1.jliteid) && 
-						 (equal_md_param_signatures 
-							md.params md1.params)
-						)
-				) tail_lst) 
-				then helper tail_lst (count +1)
-				else md.jliteid::helper tail_lst (count +1)
-	in match ( helper mdlst 0) with
-		| [] -> (true,"")
-		| lst -> (false, (" Overloaded method names: " 
-				^ (string_of_list lst string_of_var_id ",")))
-				
-(* Type check an expression *)
-(* Return the type of the Expression and a new TypedExpession *)  
-let rec type_check_expr 
-	(p: jlite_program)(env: var_decl list) 
-	(classid: class_name) (exp:jlite_exp) = 
-	let rec helper e 
-	: (jlite_type * jlite_exp) =
-		match e with
-		| BoolLiteral v -> (BoolT, e)
-		| IntLiteral v -> (IntT, e)
-		| StringLiteral v -> (StringT, e)
-		| ThisWord -> 
-			((ObjectT classid), TypedExp (e,(ObjectT classid)))
-		| NullWord -> ((ObjectT "null") , TypedExp (e,(ObjectT "null")))
-		| Var v -> 
-			let (vtyp,vid) =(find_var_decl_type env v) in
-			(vtyp, TypedExp (Var vid,vtyp)) 
-		| UnaryExp (op,arg) -> 
-			let (argtype,argTypedExp) = helper arg in
-			begin
-			match op,argtype with
-			| UnaryOp "-",IntT 
-			  -> (IntT, 
-				  TypedExp(UnaryExp (op, argTypedExp), IntT))
-			| UnaryOp "!",BoolT 
-			  -> (BoolT, 
-				  TypedExp(UnaryExp (op, argTypedExp), BoolT))
-			| _, _ -> (Unknown,e)
-			end
-		| BinaryExp (op,arg1,arg2) -> 
-			let (arg1type, arg1TypedExp)  = helper arg1 in
-			let (arg2type, arg2TypedExp) = helper arg2 in
-			begin
-			match op,arg1type,arg2type with 
-			| AritmeticOp opid,IntT,IntT 
-			  -> (IntT, TypedExp(
-					BinaryExp (op, arg1TypedExp, arg2TypedExp), IntT))
-			| RelationalOp opid,IntT,IntT 
-			  -> (BoolT, TypedExp(
-				  BinaryExp (op, arg1TypedExp, arg2TypedExp), BoolT))
-			| BooleanOp opid,BoolT,BoolT 
-			  -> (BoolT, TypedExp(
-				  BinaryExp (op, arg1TypedExp, arg2TypedExp), BoolT))
-			| _,_,_-> (Unknown, TypedExp(
-					BinaryExp (op, arg1TypedExp, arg2TypedExp), Unknown))
-			end
-		| FieldAccess (e,id) -> 
-			let (objtype, objTypedExp) = helper e in
-			begin
-			match objtype with
-			| ObjectT cname -> 
-				let typ = (find_field p cname id) in 
-				(typ, TypedExp 
-					(FieldAccess(objTypedExp,id), typ)) 
-			| _ -> (Unknown, TypedExp(
-					FieldAccess (objTypedExp,id), Unknown))
-			end
-		| ObjectCreate c -> 
-			if (exists_class_decl p c) 
-			then ((ObjectT c), TypedExp(e,(ObjectT c)))
-			else (Unknown, e)
-		| MdCall (e,args) -> 
-			(type_check_method_call p env classid (e,args)) 
-		| _ -> (Unknown, e)
-	  in  helper exp
+let is_method_compatible_with_call (md_sig: method_signature) (call: string * (S.jlite_type list)) =
+  let (md_name, (md_rettype, md_params)) = md_sig in
+  let (call_name, call_params_types) = call in
+  call_name = md_name &&
+    List.length md_params = List.length call_params_types &&
+    List.for_all2 (fun typ1 typ2 -> is_assignable_from typ1 typ2) md_params call_params_types
 
-(* Type check a method call expression *)	  
-and type_check_method_call 
-	(p: jlite_program)(env: var_decl list) 
-	(classid: class_name) 
-	((calleeexp,calleeparams)
-	:jlite_exp * (jlite_exp list)) = 
-	let (calleeid, calleecls, caleeTypedExp) =
-    	match calleeexp with
-		| Var v -> (v, classid, calleeexp)
-		| FieldAccess (e,id) -> 
-			let (typ, objTypedExp) = 
-				(type_check_expr p env classid e) in
-			begin
-			match typ with
-			| ObjectT c-> 
-				(id, c, (FieldAccess(objTypedExp,id)))
-			| _ -> failwith 
-				("Type-check error for method call. Not an object type:" 
-				^ (string_of_jlite_expr e))
-			end
-		| _ -> failwith "Type-check error for method call"
-		in
-	let rec helper explst =
-		match explst with
-		| [] -> []
-		| exp::tail_lst -> 
-			(type_check_expr p env classid exp) :: helper tail_lst in
-	let (argtypes,argExpr) = 
-		List.split( helper calleeparams) in 
-	let (ir3id,rettype) =
-		(find_method_decl_type 
-			p calleecls calleeid argtypes
-		) in
-	let caleeRenamedExp = match caleeTypedExp with
-		| Var v -> Var ir3id
-		| FieldAccess (e,id) -> FieldAccess (e,ir3id)		
-		| _ -> failwith ("Type-check error for method call. Not an identifier nor field access"
-		         ^ (string_of_jlite_expr caleeTypedExp))
-	in(rettype, TypedExp(
-			MdCall(caleeRenamedExp,argExpr),rettype))
-			
-(* Type check a list of statements and determine the return type.
-   Exceptions are thrown when a statement does not type check 
-   and when dead code is found
-*)  
-let rec type_check_stmts 
-	(p: jlite_program)(env: var_decl list) 
-	(classid: class_name) 
-	(mthd: md_decl) 
-	(stmtlst:jlite_stmt list)
-	(rettype: jlite_type option) 
-	: (jlite_type option *(jlite_stmt list))  =
-	match stmtlst with
-	| [] -> (rettype,[])
-	| s::tail_lst -> 
-		let rec helper s 
-		: (jlite_stmt * jlite_type option) =
-		match s with
-		| IfStmt (e, stmts1, stmts2) -> 
-			let (expr_type,exprnew) = 
-			 (type_check_expr p env classid e) in
-			let (then_branch,thenlist) = 
-			 (type_check_stmts p env classid mthd stmts1 rettype) in 
-			let (else_branch,elselist) = 
-			 (type_check_stmts p env classid mthd stmts2 rettype) in
-			begin
-			match expr_type with
-			| BoolT -> 
-				begin
-				match then_branch, else_branch with
-				| Some t1, Some t2 -> 
-					if (t1!= t2) 
-					then failwith 
-						("\nType-check error in " 
-						^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-						^ ". If statement returns different types on branches:\n" 
-						^ string_of_jlite_stmt s ^ "\n")
-					else (IfStmt (exprnew, thenlist,elselist),Some t1)
-				| _, _ -> (IfStmt (exprnew, thenlist,elselist), None)
-				end
-			| _ -> failwith 
-					("\nType-check error in " 
-					^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-					^ ". If expression is not of type boolean:\n" 
-					^ string_of_jlite_expr e ^ "\n")
-			end
-		| WhileStmt (e, stmts) -> 
-			let (expr_type,exprnew) = 
-			 (type_check_expr p env classid e) in
-			let (rettype, stmtsnew) = 
-			 (type_check_stmts p env classid mthd stmts rettype) in 
-			begin
-			match expr_type with
-			| BoolT -> (WhileStmt (exprnew, stmtsnew), rettype)
-			| _ -> failwith 
-					("\nType-check error in " 
-					^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-					^ ". While expression is not of type boolean:\n" 
-					^ string_of_jlite_expr e ^ "\n")
-			end
-		| ReturnStmt e ->  
-			let (expr_type,exprnew) = 
-			 (type_check_expr p env classid e) in
-			begin
-			match expr_type with
-			| Unknown -> 
-				failwith 
-				("\nType-check error in " 
-				^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-				^ ". Return expression fails:\n" 
-				^ string_of_jlite_stmt s ^ "\n")
-			| _ ->  (ReturnStmt exprnew, Some expr_type)
-			end
-		| ReturnVoidStmt ->  
-			(ReturnVoidStmt, Some VoidT)
-		| AssignStmt (id,e) ->  
-			let (exprtype,exprnew) = 
-			 (type_check_expr p env classid e) in
-			let (idtype,scopedid)= (find_var_decl_type env id) in 
-			if (compare_jlite_types idtype exprtype)
-				then (AssignStmt(scopedid,exprnew),None)
-				else failwith 
-					("\nType-check error in " 
-					^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-					^ ". Assignment statement failskkk:\n" 
-					^ string_of_jlite_stmt s ^ string_of_jlite_type exprtype ^ "\n")
-		| ReadStmt id -> 
-			let (idtype,scopedid) = (find_var_decl_type env id) in
-			begin
-			match idtype with
-			| ObjectT _ | Unknown  -> 
-				failwith 
-				("\nType-check error in " 
-				^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-				^ ". Read statement fails:\n" 
-				^ string_of_jlite_stmt s ^ "\n")
-			| _ ->  (ReadStmt scopedid,None)
-			end
-		| PrintStmt e -> 
-			let (expr_type,exprnew) = 
-			 (type_check_expr p env classid e) in
-			begin
-			match expr_type with
-			| Unknown | ObjectT _ -> 
-				failwith 
-				("\nType-check error in " 
-				^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-				^ ". Statement fails:\n" 
-				^ string_of_jlite_stmt s ^ "\n")
-			| _ ->  (PrintStmt exprnew, None)
-			end
-		|  MdCallStmt (e) -> 
-			let (expr_type,exprnew) = 
-			 (type_check_expr p env classid e) in
-			begin
-			match expr_type with
-			| Unknown -> 
-				failwith 
-				("\nType-check error in " 
-				^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-				^ ". Statement fails:\n" 
-				^ string_of_jlite_expr exprnew ^ "\n")
-			| _ ->  (MdCallStmt exprnew, None)
-			end
-		| AssignFieldStmt (id,e) ->  
-			let (expr_type,exprnew) = 
-			 (type_check_expr p env classid e) in
-			let (id_type,idnew) = 
-			 (type_check_expr p env classid id) in 
-			if (expr_type == id_type)
-				then (AssignFieldStmt(idnew,exprnew),None)
-				else failwith 
-					("\nType-check error in " ^ classid ^ "." 
-					^ string_of_var_id mthd.jliteid 
-					^ ". Field assignment statement fails:\n" 
-					^ string_of_jlite_stmt s ^ "\n")					
-	  in let (newstmt,newrettype) = ( helper s) in
-	  match newrettype,tail_lst with
-		| Some t, head::tail -> 
-			failwith 
-			("\nType-check error in " ^ classid ^ "." 
-			 ^ string_of_var_id mthd.jliteid 
-			 ^ ". Dead Code:\n" 
-			 ^ (string_of_list tail_lst string_of_jlite_stmt "\n" ^ "\n")) 
-		| _,_ ->  
-			let (rettype,stmts) = 
-				(type_check_stmts p env classid mthd tail_lst newrettype) in
-				(rettype,(newstmt::stmts))
-  
-(* TypeCheck a JLite Method Declaration *)
-let type_check_mthd_decl p env cname m : md_decl = 
-	let mthdenv = 
-		List.append m.params m.localvars in 
-	let (retval, errmsg) = 
-		(type_check_var_decl_list p mthdenv)
-	in if (retval == false) 
-		then failwith 
-		 ("\nType-check error in " ^ cname ^ "." 
-		  ^ string_of_var_id m.jliteid 
-		  ^ " parameter or local variables declarations.\n"
-		  ^ errmsg ^ "\n")
-		else
-		let scopedEnv = List.append 
-				(create_scoped_var_decls mthdenv 2) env in 
-		(* TypeCheck the body of the method *)
-			let (rettyp,newstmts) = 
-				(type_check_stmts p scopedEnv cname m m.stmts None) in
-		(* TypeCheck the return type of the method *)
-			let _ = match rettyp,m.rettype with
-			| None, VoidT -> true
-			| Some VoidT, VoidT -> true
-			| None, t -> 
-				failwith 
-				("\nType-check error in " ^ cname ^ "." 
-				^ string_of_var_id m.jliteid 
-				^ ". This method must return a result of type "
-				^ string_of_jlite_type m.rettype ^ ". \n")
-			| Some (ObjectT t1), (ObjectT t2) -> 
-				if ((String.compare t1 t2) != 0) 
-				then failwith 
-					("\nType-check error in " ^ cname ^ "." 
-					^ string_of_var_id m.jliteid 
-					^ ". Type mismatch. Return type of method " 
-					^ "is different from declared type "
-					^ string_of_jlite_type m.rettype ^ t1 ^ ". \n")
-				else true
-			| Some t1, t2 -> 
-				if (t1!= t2) 
-				then failwith 
-					("\nType-check error in " ^ cname ^ "." 
-					^ string_of_var_id m.jliteid 
-					^ ". Type mismatch. Return type of method "
-					^ "is different from declared type "
-					^ string_of_jlite_type m.rettype 
-					^ string_of_jlite_type t1 ^ ". \n")
-				else true
-			in { m with stmts=newstmts;
-				}
 
-(* TypeCheck a JLite Program. 
-   Return a new JLite Program where expressions are annotated with types
-*)
+let rec type_check_stmts (class_desc: class_descriptor) env stmts =
+  let mapped_stmts = List.map (type_check_stmt class_desc env) stmts in
+  let rec get_last_type lst =
+    match lst with
+    | [] -> failwith "Empty stmts?"
+    | [(type_checked_stmt, typ)] -> typ
+    | hd::tl -> get_last_type tl
+  in
+  (List.map (fun (s, t) -> s) mapped_stmts, get_last_type mapped_stmts)
 
-let type_check_jlite_program  
-	(p:jlite_program) : jlite_program=
-	let type_check_class_main 
-		((cname,mmthd):class_main ) =
-		(cname,(type_check_mthd_decl p [] cname mmthd )) in
-	let rec fix_all_md_names (clss : class_decl list) = 
-		match clss with 
-		| [] ->  (true,"")
-		| ((cn,cvs,cms)::clss1) -> 
-			let (retval, errmsg) = (type_check_md_decl_list cn cms) in 
-			if (retval == false) then 
-				failwith ("\nMethod names crash in" ^ cn
-				          ^ " method declarations." ^ errmsg ^ "\n")
-			else fix_all_md_names clss1
-	in 
-	let rec type_check_class_decl 
-		((cname,cvars,cmthds):class_decl) =
-		(* TypeCheck field declarations *)
-		let (retval, errmsg) = 
-			(type_check_var_decl_list p cvars) in
-		if (retval==false) then 
-			failwith 
-			("\nType-check error in " ^ cname 
-			^ " field declarations." ^ errmsg ^ "\n")
-		(* TypeCheck methods overloading *)
-		(*
-		else 
-			 let (retval, errmsg) = 
-			(type_check_md_decl_list cname cmthds) in
-			if (retval==false) then 
-				failwith 
-				("\nType-check error in " ^ cname 
-				^ " method declarations." ^ errmsg ^ "\n")
-		*)
-			(* TypeCheck method declarations *)
-		else let env = (create_scoped_var_decls cvars 1) in
-				let rec helper mthdlst =
-					match mthdlst with 
-					| [] -> []
-					| m::tail_rest -> 
-						(type_check_mthd_decl p env cname m)
-							::( helper tail_rest)
-				in (cname,cvars, (helper cmthds))
-	in 
-	begin
-		let (mainclass, classes) = p in 
-		let (_,_) = fix_all_md_names classes in
-		let newmain =(type_check_class_main mainclass) in
-		let newclasses=(List.map type_check_class_decl classes) in
-		(newmain, newclasses)
-	end
-	
-(*
-let type_check_jlite_program  
-	(p:jlite_program) : jlite_program=
-	let type_check_class_main 
-		((cname,mmthd):class_main ) =
-		(cname,(type_check_mthd_decl p [] cname mmthd )) in
-	let rec type_check_class_decl 
-		((cname,cvars,cmthds):class_decl) =
-		(* TypeCheck field declarations *)
-		let (retval, errmsg) = 
-			(type_check_var_decl_list p cvars) in
-		if (retval==false) then 
-			failwith 
-			("\nType-check error in " ^ cname 
-			^ " field declarations." ^ errmsg ^ "\n")
-		(* TypeCheck methods overloading *)
-		else let (retval, errmsg) = 
-			(type_check_md_decl_list cname cmthds) in
-			if (retval==false) then 
-				failwith 
-				("\nType-check error in " ^ cname 
-				^ " method declarations." ^ errmsg ^ "\n")
-			(* TypeCheck method declarations *)
-			else let env = (create_scoped_var_decls cvars 1) in
-				let rec helper mthdlst =
-					match mthdlst with 
-					| [] -> []
-					| m::tail_rest -> 
-						(type_check_mthd_decl p env cname m)
-							::( helper tail_rest)
-				in (cname,cvars, (helper cmthds))
-	in 
-	begin
-		let (mainclass, classes) = p in 
-		let newmain =(type_check_class_main mainclass) in
-		let newclasses=(List.map type_check_class_decl classes) in
-		(newmain, newclasses)
-	end
- *)
+and type_check_stmt (class_desc: class_descriptor) env (stmt: S.jlite_stmt) =
+  match stmt with
+  | S.IfStmt (e, s_true, s_false) ->
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     let type_checked_s_true, s_true_type = type_check_stmts class_desc env s_true in
+     let type_checked_s_false, s_false_type = type_check_stmts class_desc env s_false in
+     if e_type <> S.BoolT then
+       let () = R.report_error @@ "Expected boolean expression in an IfStmt. Got " ^ (S.string_of_jlite_type e_type) ^ " instead. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+       (stmt, S.Unknown)
+     else if s_true_type <> s_false_type then
+       let () = R.report_error @@ "Expected the same return type from the true block and the false block in an IfStmt. Got " ^ (S.string_of_jlite_type s_true_type) ^ " for the true block and " ^ (S.string_of_jlite_type s_false_type) ^ " for the false block. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+       (stmt, S.Unknown)
+     else
+       (IfStmt (TypedExp (type_checked_e, e_type), type_checked_s_true, type_checked_s_false), s_true_type)
+  | S.WhileStmt (e, s_true) ->
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     let type_checked_s_true, s_true_type = type_check_stmts class_desc env s_true in
+     if e_type <> S.BoolT then
+       let () = R.report_error @@ "Expected boolean expression in a WhileStmt. Got " ^ (S.string_of_jlite_type e_type) ^ " instead. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+       (stmt, S.Unknown)
+     else
+       (WhileStmt (TypedExp (type_checked_e, e_type), type_checked_s_true), s_true_type)
+  | S.ReadStmt varid ->
+     let varid_str = S.string_of_var_id varid in
+     let (mapped_type, scope) = local_env_lookup env varid_str in
+     begin
+       match mapped_type with
+       | Some S.IntT -> (ReadStmt (TypedVarId (varid_str, S.IntT, scope)), VoidT) (* TODO SCOPE *)
+       | Some S.BoolT -> (ReadStmt (TypedVarId (varid_str, S.BoolT, scope)), VoidT) (* TODO SCOPE *)
+       | Some S.StringT -> (ReadStmt (TypedVarId (varid_str, S.StringT, scope)), VoidT) (* TODO SCOPE *)
+       | Some t ->
+          let () = R.report_error @@ "Expected Int, Bool, or String in ReadStmt, got " ^ (S.string_of_jlite_type t) ^ " instead. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+          (stmt, S.Unknown)
+       | None -> 
+          let () = R.report_error @@ "Unbound variable " ^ varid_str ^ " in a ReadStmt. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+          (stmt, S.Unknown)
+     end
+  | S.PrintStmt e ->
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     begin
+       match e_type with
+       | S.IntT
+         | S.BoolT
+         | S.StringT -> (PrintStmt (TypedExp (type_checked_e, e_type)), VoidT)
+       | _ ->
+          let () = R.report_error @@ "Expected expression with type Int, Bool, or String in PrintStmt, got " ^ (S.string_of_jlite_type e_type) ^ " instead. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+          (stmt, S.Unknown)
+     end
+  | S.AssignStmt (varid, e) ->
+     let varid_str = S.string_of_var_id varid in
+     let (mapped_type, scope) = local_env_lookup env varid_str in
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     begin
+       match mapped_type with
+       | Some typ ->
+          if is_assignable_from typ e_type then 
+            (AssignStmt (TypedVarId (varid_str, typ, scope), TypedExp (type_checked_e, e_type)), VoidT)
+          else
+            let () = R.report_error @@ "Cannot assign an expression of type " ^ (if e_type = S.Unknown then "NULL" else S.string_of_jlite_type e_type) ^ " to a variable with type " ^ (S.string_of_jlite_type typ) ^ ". Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+            (stmt, S.Unknown)
+       | None ->
+          let () = R.report_error @@ "Unbound variable " ^ varid_str ^ " in an AssignStmt. Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+          (stmt, S.Unknown)
+     end
+  | S.AssignFieldStmt (e1, e2) ->
+     let (type_checked_e1, e1_type) = force_TypedExp @@ type_check_expr class_desc env e1 in
+     let (type_checked_e2, e2_type) = force_TypedExp @@ type_check_expr class_desc env e2 in
+     begin
+       match type_checked_e1 with
+       | FieldAccess (e11, varid) ->
+          if e1_type <> e2_type then
+            begin
+              match e1_type, e2_type with
+              | ObjectT _, S.Unknown -> (AssignFieldStmt (TypedExp (type_checked_e1, e1_type), TypedExp (type_checked_e2, e2_type)), e1_type)
+              | _, _ ->
+                 let () = R.report_error @@ "Cannot assign an expression of type " ^ (if e2_type = S.Unknown then "NULL" else S.string_of_jlite_type e2_type) ^ " to a variable with type " ^ (S.string_of_jlite_type e1_type) ^ ". Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+                 (stmt, S.Unknown)
+            end
+          else
+            (AssignFieldStmt (TypedExp (type_checked_e1, e1_type), TypedExp (type_checked_e2, e2_type)), e1_type)
+       | _ ->
+          let () = R.report_error @@ "Trying to do field assignment when the left hand side is not a field access, but a " ^ (S.string_of_jlite_type e1_type) ^ ". Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+          (stmt, S.Unknown)
+     end
+  | S.MdCallStmt e ->
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     begin
+       match type_checked_e with
+       | MdCall (e1, params) -> (MdCallStmt (TypedExp (type_checked_e, e_type)), e_type) (* Defer this to type_check_expr *)
+       | _ -> failwith "There must be an MdCall inside MdCallStmt"
+     end
+  | S.ReturnStmt e ->
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     let (stored_ret, scope) = local_env_lookup env "$RET" in
+     begin
+       match stored_ret with
+       | Some typ ->
+          if typ = e_type then (ReturnStmt (TypedExp (type_checked_e, e_type)), e_type)
+          else
+            let () = R.report_error @@ "The expected return value is " ^ (S.string_of_jlite_type typ) ^ " while the return expression has type " ^ (S.string_of_jlite_type e_type) ^ ". Program fragment: \n" ^ (S.string_of_jlite_stmt stmt) in
+            (stmt, S.Unknown)
+       | None -> failwith "Where are we?"
+     end
+  | S.ReturnVoidStmt -> (stmt, VoidT)
 
+and type_check_expr (class_desc: class_descriptor) env (expr: S.jlite_exp) =
+  match expr with
+  | S.UnaryExp (op, e) ->
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     begin
+       match op, e_type with
+       | UnaryOp "-", IntT -> TypedExp (UnaryExp (op, TypedExp (type_checked_e, e_type)), IntT)
+       | UnaryOp "!", BoolT -> TypedExp (UnaryExp (op, TypedExp (type_checked_e, e_type)), BoolT)
+       | _, _ ->
+          let () = R.report_error @@ "Invalid UnaryExp: Trying to apply " ^ (S.string_of_jlite_op op) ^ " to an expression of type " ^ (S.string_of_jlite_type e_type) ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+          TypedExp (expr, S.Unknown)
+     end
+  | S.BinaryExp (op, e1, e2) ->
+     let (type_checked_e1, e1_type) = force_TypedExp @@ type_check_expr class_desc env e1 in
+     let (type_checked_e2, e2_type) = force_TypedExp @@ type_check_expr class_desc env e2 in
+     begin
+       match e1_type, e2_type, op with
+       | IntT, IntT, AritmeticOp "+"
+         | IntT, IntT, AritmeticOp "-"
+         | IntT, IntT, AritmeticOp "*"
+         | IntT, IntT, AritmeticOp "/" -> TypedExp (BinaryExp (op, TypedExp (type_checked_e1, e1_type), TypedExp (type_checked_e2, e2_type)), IntT)
+       | IntT, IntT, RelationalOp ">"
+         | IntT, IntT, RelationalOp "<"
+         | IntT, IntT, RelationalOp "<="
+         | IntT, IntT, RelationalOp ">="
+         | IntT, IntT, RelationalOp "=="
+         | IntT, IntT, RelationalOp "!="
+         | BoolT, BoolT, RelationalOp "=="
+         | BoolT, BoolT, RelationalOp "!="
+         | BoolT, BoolT, BooleanOp "&&"
+         | BoolT, BoolT, BooleanOp "||" -> TypedExp (BinaryExp (op, TypedExp (type_checked_e1, e1_type), TypedExp (type_checked_e2, e2_type)), BoolT)
+       | _, _, _ ->
+          let () = R.report_error @@ "Invalid BinaryExp: Trying to apply " ^ (S.string_of_jlite_op op) ^ " with LHS of type " ^ (S.string_of_jlite_type e1_type) ^ " and RHS of type " ^ (S.string_of_jlite_type e2_type) ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+          TypedExp (expr, S.Unknown)
+     end
+  | S.FieldAccess (e, varid) ->
+     let varid_str = S.string_of_var_id varid in
+     let (type_checked_e, e_type) = force_TypedExp @@ type_check_expr class_desc env e in
+     begin
+       match e_type with
+       | ObjectT class_name ->
+          let class_desc_entry = find_opt (fun (name, (_, _)) -> name = class_name) class_desc in
+          begin
+            match class_desc_entry with
+            | Some (class_name, (fds, mds)) ->
+               let fd_entry = assoc_opt varid_str fds in
+               begin
+                 match fd_entry with
+                 | Some typ -> TypedExp (FieldAccess (TypedExp (type_checked_e, e_type), TypedVarId (varid_str, typ, 0)), typ)
+                 | None ->
+                    let () = R.report_error @@ "Attempting to access nonexistent field " ^ varid_str ^ " in object " ^ class_name ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+                    TypedExp (expr, S.Unknown)
+               end
+            | None ->
+               let () = R.report_error @@ "Attempting to access field of a nonexistent class " ^ class_name ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+               TypedExp (expr, S.Unknown)
+          end
+       | _ ->
+          let () = R.report_error @@ "Attempting to do field access on something other than object with type " ^ (S.string_of_jlite_type e_type) ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+          TypedExp (expr, S.Unknown)
+     end
+  | S.ObjectCreate class_name ->
+     let class_desc_entry = find_opt (fun (name, (_, _)) -> name = class_name) class_desc in
+     begin
+       match class_desc_entry with
+       | Some (class_name, (fds, mds)) -> TypedExp (ObjectCreate class_name, ObjectT class_name)
+       | None ->
+          let () = R.report_error @@ "Attempting to create an object of a nonexistent class " ^ (S.string_of_jlite_expr expr) ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+          TypedExp (expr, S.Unknown)
+     end
+  | S.MdCall (e, params) ->
+     let typed_exp_params = List.map (type_check_expr class_desc env) params in
+     let nparams = List.map force_TypedExp typed_exp_params in
+     let nparams_no_names = List.map (fun (_, typ) -> typ) nparams in
+     let find_matching_md class_name md_name =
+       let class_desc_entry_m = assoc_opt class_name class_desc in
+       begin
+         match class_desc_entry_m with
+         | Some (fds, mds) ->
+            let md_matches (md_sig: method_signature) : bool =
+              is_method_compatible_with_call md_sig (md_name, nparams_no_names)
+            in
+            let md_to_call_m = find_all md_matches mds in
+            begin
+              match md_to_call_m with
+              | [(md_name, (md_rettype, md_params))] -> (md_name, (md_rettype, md_params))
+              | [] ->
+                 let () = R.report_error @@ "Attempting to do a method call on class " ^ class_name ^ " with method name = " ^ md_name ^ " without any matching method signature. Program fragment = " ^ (S.string_of_jlite_expr expr) in
+                 ("", (S.Unknown, []))
+              | _ ->
+                 let () = R.report_error @@ "Unable to determine the method to call. Program fragment: " ^ (S.string_of_jlite_expr expr) ^ ". Candidates: " ^ (String.concat "\n" @@ List.map string_of_method_signature md_to_call_m) ^ "\n" in
+                 ("", (S.Unknown, []))
+            end
+         | _ ->
+            let () = R.report_error @@ "Attempting to do a method call on a nonexistent class " ^ class_name ^ ". Program fragment = " ^ (S.string_of_jlite_expr expr) in
+            ("", (S.Unknown, []))
+       end
+     in
+     (* Assign types to nulls in call params *)
+     let assign_types_to_nulls (md_params: S.jlite_type list) (call_params: S.jlite_exp list) =
+       assert (List.length md_params = List.length call_params);
+       let rec aux md_params call_params acc =
+         match md_params, call_params with
+         | hd1::tl1, TypedExp (te, Unknown)::tl2 -> aux tl1 tl2 (TypedExp (te, hd1) :: acc)
+         | hd1::tl1, hd2::tl2 -> aux tl1 tl2 (hd2 :: acc)
+         | [], [] -> List.rev acc
+         | _, _ -> failwith "Length of the two lists must be equal"
+       in
+       aux md_params call_params []
+     in
+     begin
+       match e with
+       (* Global call *)
+       | FieldAccess (inner_e, varid) ->
+          let varid_str = S.string_of_var_id varid in
+          let tce, te = force_TypedExp (type_check_expr class_desc env inner_e) in
+          begin
+            match te with
+            | ObjectT class_name ->
+               let (md_name, (md_rettype, md_params)) = find_matching_md class_name varid_str in
+               let typed_exp_params_without_null = assign_types_to_nulls md_params typed_exp_params in
+               TypedExp (MdCall (FieldAccess (TypedExp (tce, te), varid), typed_exp_params_without_null), md_rettype)
+            | _ ->
+               let () = R.report_error @@ "Attempting to do a method call on " ^ (S.string_of_jlite_type te) ^ " (expected ObjectT). Program fragment = " ^ (S.string_of_jlite_expr expr) in
+               TypedExp (expr, S.Unknown)
+          end
+       (* Local Call *)
+       | Var (varid) ->
+          let varid_str = S.string_of_var_id varid in
+          let this_typ, scope = local_env_lookup env "this" in
+          begin
+            match this_typ with
+            | Some (ObjectT class_name) ->
+               let (md_name, (md_rettype, md_params)) = find_matching_md class_name varid_str in
+               let typed_exp_params_without_null = assign_types_to_nulls md_params typed_exp_params in
+               TypedExp (MdCall (Var (varid), typed_exp_params_without_null), md_rettype)
+            | Some _ -> failwith "`this` must be bound to an ObjectT"
+            | None -> failwith "Where are we?"
+          end
+       | _ ->
+          let () = R.report_error @@ "Attempting to do a method call on " ^ (S.string_of_jlite_expr e) ^ ". Program fragment = " ^ (S.string_of_jlite_expr expr) in
+          TypedExp (expr, S.Unknown)
+     end
+  | S.BoolLiteral _ -> TypedExp (expr, S.BoolT)
+  | S.IntLiteral _ -> TypedExp (expr, S.IntT)
+  | S.StringLiteral _ -> TypedExp (expr, S.StringT)
+  | S.ThisWord ->
+     let this_typ, scope = local_env_lookup env "this" in
+     begin
+       match this_typ with
+       | Some typ -> TypedExp (expr, typ)
+       | None -> failwith "Where are we?"
+     end
+  | S.NullWord -> TypedExp (expr, S.Unknown)
+  | S.Var varid ->
+     let varid_str = S.string_of_var_id varid in
+     let (varid_typ, scope) = local_env_lookup env varid_str in
+     begin
+       match varid_typ with
+       | Some typ -> TypedExp (Var (TypedVarId (varid_str, typ, scope)), typ)
+       | None ->
+          let () = R.report_error @@ "Attempting to access an unbound variable " ^ varid_str ^ ". Program fragment: \n" ^ (S.string_of_jlite_expr expr) in
+          TypedExp (expr, S.Unknown)
+     end
+  | _ -> failwith "Unhandled jlite_exp"
+     
+
+let type_check_block (class_desc: class_descriptor) env localvars stmts =
+  let localvar_mapping = List.map (fun (typ, varid) -> (S.string_of_var_id varid, typ, 2)) localvars in
+  let env2 = localvar_mapping @ env in
+  let (type_checked_stmts, block_type) = type_check_stmts class_desc env2 stmts in
+  (localvars, type_checked_stmts)
+
+let find_invalid_type (class_desc: class_descriptor) vars =
+  find_opt
+    (fun (typ, id) ->
+      match typ with
+      | ObjectT obj -> not (List.exists (fun (name, (_, _)) -> name = obj) class_desc)
+      | IntT | BoolT | StringT | VoidT -> false
+      | _ -> failwith "Should not exist"
+    )
+  vars
+
+let type_check_md_decl class_name (class_desc: class_descriptor) env (md_decl: S.md_decl) =
+  let invalid_type_in_params = find_invalid_type class_desc md_decl.params in
+  let invalid_type_in_localvars = find_invalid_type class_desc md_decl.localvars in
+  match invalid_type_in_params, invalid_type_in_localvars with
+  | Some (t1, _), _ ->
+     let () = R.report_error @@ "Invalid type " ^ (S.string_of_jlite_type t1) ^ " in the parameters of method " ^ (S.string_of_var_id md_decl.jliteid) ^ " in class " ^ class_name ^ " !" in
+     md_decl
+  | None, Some (t1, _) ->
+     let () = R.report_error @@ "Invalid type " ^ (S.string_of_jlite_type t1) ^ " in the local variables of method " ^ (S.string_of_var_id md_decl.jliteid) ^ " in class " ^ class_name ^ " !" in
+     md_decl
+  | None, None ->
+    let param_mapping = List.map (fun (typ, varid) -> (S.string_of_var_id varid, typ, 2)) md_decl.params in
+    let ret_mapping = ("$RET", md_decl.rettype, -1) in
+    let env2 = param_mapping @ [ret_mapping] @ env in
+    let localvars2, stmts2 = type_check_block class_desc env2 md_decl.localvars md_decl.stmts in
+    {md_decl with localvars = localvars2; stmts = stmts2}
+
+let type_check_main_class (class_desc: class_descriptor) (main_class:S.class_name * S.md_decl) =
+  let class_name, md_decl = main_class in
+  let env = [("this", ObjectT class_name, 1)]  in 
+  let type_checked_class = type_check_md_decl class_name class_desc env md_decl in
+  (class_name, type_checked_class)
+
+let type_check_aux_class class_desc aux_class =
+  let class_name, var_decls, md_decls = aux_class in
+  (* Class scope = 1 *)
+  let invalid_type_in_class_vars = find_invalid_type class_desc var_decls in
+  match invalid_type_in_class_vars with
+  | Some (t1, _) ->
+     let () = R.report_error @@ "Invalid type " ^ (S.string_of_jlite_type t1) ^ " in the class variables of class " ^ class_name ^ "!" in
+     (class_name, var_decls, md_decls)
+  | None ->
+    let var_decls = List.map (fun (typ, id) -> (typ, TypedVarId (S.string_of_var_id id, typ, 1))) var_decls in
+    let var_mapping = List.map (fun (typ, varid) -> (S.string_of_var_id varid, typ, 1)) var_decls in
+    let env = ("this", ObjectT class_name, 1) :: (var_mapping) in
+    let type_checked_md_decls = List.map (type_check_md_decl class_name class_desc env) md_decls in
+    (class_name, var_decls, type_checked_md_decls)
+
+let type_check_jlite_program (prog: S.jlite_program) =
+  let (main_class, aux_classes) = prog in
+  let (main_class_name, main_class_md_decl) = main_class in
+  let () = Dup_check.find_duplicate_classes prog in
+  let () = Dup_check.find_duplicate_methods (main_class_name, [], [main_class_md_decl]) in
+  let () = List.iter Dup_check.find_duplicate_methods aux_classes in
+  let () = Dup_check.find_duplicate_class_vars (main_class_name, [], [main_class_md_decl]) in
+  let () = List.iter Dup_check.find_duplicate_class_vars aux_classes in
+  let () = Dup_check.find_duplicate_method_args_ids (main_class_name, [], [main_class_md_decl]) in
+  let () = List.iter Dup_check.find_duplicate_method_args_ids aux_classes in
+  let () = Dup_check.ensure_unique_defs_in_class (main_class_name, [], [main_class_md_decl]) in
+  let () = List.iter Dup_check.ensure_unique_defs_in_class aux_classes in
+  let () = Dup_check.ensure_unique_defs_in_methods (main_class_name, [], [main_class_md_decl]) in
+  let () = List.iter Dup_check.ensure_unique_defs_in_methods aux_classes in
+  let () = update_method_names (main_class_name, [], [main_class_md_decl]) in
+  let () = List.iter update_method_names aux_classes in
+  let class_descriptor = initialize prog in
+  let type_checked_main_class = type_check_main_class class_descriptor main_class in
+  let type_checked_aux_classes = List.map (type_check_aux_class class_descriptor) aux_classes in
+  (type_checked_main_class, type_checked_aux_classes)

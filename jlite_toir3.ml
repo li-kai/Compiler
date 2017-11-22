@@ -1,321 +1,257 @@
+module S = Jlite_structs
+module T = Jlite_annotatedtyping
+module S3 = Ir3_structs
 
-(* ===================================================== *)
-(* ============== CS4212 Compiler Design ============== *)
-(*   Transformation to intermediary representation IR3   *)
-(* ===================================================== *)
+open S
+open T
 
-open Jlite_structs
-open Ir3_structs
+let fresh_var_counter = ref 0
+let gen_fresh_var () =
+  let id = !fresh_var_counter in
+  fresh_var_counter := !fresh_var_counter + 1;
+  "_t" ^ (string_of_int id)
 
-let labelcount = ref 0 
-let fresh_label () = 
-	(labelcount:=!labelcount+1; !labelcount)
+let fresh_label_counter = ref 0
+let gen_label () =
+  let id = !fresh_label_counter in
+  fresh_label_counter := !fresh_label_counter + 1;
+  id
 
-let varcount = ref 0 
-let fresh_var () = 
-	(varcount:=!varcount+1; (string_of_int !varcount))
-	
-let iR3Expr_get_idc3 (exp:ir3_exp) =
-	match exp with
-	| Idc3Expr e -> e
-	| _ -> failwith " Error in getidc "
-		
-let iR3Expr_get_id3 (exp:ir3_exp) =
-	match exp with
-	| Idc3Expr e ->  
-		begin
-		match e with 
-		| Var3 id -> id
-		| _ -> failwith " Error in getid "
-		end
-	| _ -> failwith " Error in getid"
+let method_table = Hashtbl.create 100
 
-let iR3Expr_to_id3 (exp:ir3_exp) (typ:jlite_type) 
-	vars stmts (toidc3:bool) 
-	: (ir3_exp * var_decl3 list * ir3_stmt list)  =
-	(* 
-	if (toidc3 == false) then (exp,vars,stmts)
-	else
-		*)
-	let new_varname = "_t" ^ fresh_var() in
-	let new_vardecl = (typ, new_varname) in 
-	let new_stmt = AssignStmt3 (new_varname, exp) in
-	(Idc3Expr (Var3 new_varname), 
-		List.append vars [new_vardecl], 
-		List.append stmts [new_stmt])
-	
-(* Transform a var_id to IR3 by looking at the scope of the variable *)	
-let jlitevarid_to_IR3Expr
-	(classid: class_name) 
-	(v:var_id) (toid3:bool)
-	:(ir3_exp * var_decl3 list * ir3_stmt list) =
-	match v with
-	| SimpleVarId id -> (Idc3Expr (Var3 id),[],[])
-	| TypedVarId (id,t,s) -> 
-		if (s == 1) (* class scope *)
-		then 
-			let thisExpr = 
-			 FieldAccess3 ("this",id) in 
-			 (iR3Expr_to_id3 thisExpr t [] [] toid3)
-		else
-			let newExpr = Idc3Expr (Var3 id) in
-			(newExpr,[], [])
-			
-(* Transform an expression to IR3 *)
-let rec jliteexpr_to_IR3Expr
-	(classid: class_name) 
-	(jexp:jlite_exp) (toidc3:bool) (toid3:bool)
-	:(ir3_exp * var_decl3 list * ir3_stmt list) =
-	let rec helper 
-		(je:jlite_exp) (toidc3:bool) (toid3:bool)=
-		match je with
-		| BoolLiteral v -> 
-			let newExpr = Idc3Expr (BoolLiteral3 v) in 
-			(iR3Expr_to_id3 newExpr BoolT [] [] toid3)
-		| IntLiteral v -> 
-			let newExpr = Idc3Expr (IntLiteral3 v) in
-			(iR3Expr_to_id3 newExpr IntT [] [] toid3)
-		| StringLiteral v -> 
-			let newExpr = Idc3Expr (StringLiteral3 v) in 
-			(iR3Expr_to_id3 newExpr StringT [] [] toid3)
-		| TypedExp (te,t) -> 
-			begin 
-			match te with
-			| Var v -> 
-				(jlitevarid_to_IR3Expr classid v toidc3)
-			| ThisWord -> (Idc3Expr (Var3 "this"),[],[])
-			| NullWord -> (Idc3Expr (Var3 "null"),[],[])
-			| UnaryExp (op,arg) -> 
-				let (argIR3,vars,stmts) = (helper arg true false) in
-				let argIdc3 = (iR3Expr_get_idc3 argIR3) in 
-				let newExpr = UnaryExp3 (op,argIdc3) in 
-				(iR3Expr_to_id3 newExpr t vars stmts toidc3)
-			| BinaryExp (op,arg1,arg2) -> 
-				let (arg1IR3,vars1,stmts1) = (helper arg1 true false) in
-				let (arg2IR3,vars2,stmts2) = (helper arg2 true false) in
-				let arg1Idc3 = (iR3Expr_get_idc3 arg1IR3) in 
-				let arg2Idc3 = (iR3Expr_get_idc3 arg2IR3) in 
-				let newExpr = BinaryExp3 (op, arg1Idc3, arg2Idc3) in 
-				(iR3Expr_to_id3 newExpr t 
-					(List.append vars1 vars2) 
-					(List.append stmts1 stmts2) toidc3)
-			| FieldAccess (arg,id) -> 
-				let (argIR3,vars,stmts) = (helper arg true true) in
-				let argId3 = (iR3Expr_get_id3 argIR3) in 
-				let newExpr = FieldAccess3 (argId3, string_of_var_id id) in
-				(iR3Expr_to_id3 newExpr t vars stmts toidc3)
-			| ObjectCreate c -> 
-				let newExpr = ObjectCreate3 c in
-				(iR3Expr_to_id3 newExpr t [] [] toidc3)
-(*
-			| MdCall (e,args) -> 
-				let (newExpr,vars,stmts) = 
-					(jlitemdcall_to_IR3Expr classid (e,args) toidc3) in
-				(iR3Expr_to_id3 newExpr t vars stmts toidc3)
-*)
-			| MdCall (e,args) -> 
-				let (newExpr,vars,stmts) = 
-					(jlitemdcall_to_IR3Expr classid (e,args) toidc3) in
-				(iR3Expr_to_id3 newExpr t vars stmts toidc3)
-			| _ -> failwith "Error: Untyped expression"
-			end
-		| _ -> failwith "Error: Untyped expression"
-	  in helper jexp toidc3 toid3
+let jlite_to_IR3_var_decls vars =
+  List.map (fun (typ, varid) -> (typ, Jlite_structs.string_of_var_id varid)) vars
 
-	  
-(* Transform a function application to IR3 *) 	  
-and jlitemdcall_to_IR3Expr
-	    (classid: class_name) 
-    	(exp,args) (toidc3:bool) = 
-	let (calleeid, caller, expVars, expStmts) =
-	match exp with
-		| Var v -> (v, "this", [], [])
-		| FieldAccess (e,id) -> 
-			let (expIR3, vars, stmts) = 
-				(jliteexpr_to_IR3Expr classid e true true) in
-			(id, (iR3Expr_get_id3 expIR3), vars, stmts) 
-		| _ -> failwith "Error in transforming method call" 
-	in
-	let rec helper explst =
-		match explst with
-		| [] -> []
-		| arg::tail_lst -> 
-			let (argIR3,vars,stmts) = 
-				(jliteexpr_to_IR3Expr classid arg true false) in
-			let argIdc3 = (iR3Expr_get_idc3 argIR3) in
-			 (argIdc3,(vars,stmts)) ::  helper tail_lst
-	in let res = ( helper args) in 
-	let (paramsIR3, varsstmts) = List.split res in
-	let (paramsNewVars, paramsNewStmts) = List.split varsstmts in
-		(MdCall3 (string_of_var_id calleeid, (Var3 caller)::paramsIR3),
-		 expVars@(List.flatten paramsNewVars),
-		 expStmts@(List.flatten paramsNewStmts))
-	
-let jlitevar_decl_lst_to_ID3 
-	(vlst:var_decl list) 
-	:(var_decl3 list) =
-	List.map (fun (t,id) -> (t, string_of_var_id id)) vlst
+let get_method_signature (class_name: string) (md_name: string) (params_types: S.jlite_type list) =
+  class_name ^ "::" ^ md_name ^ " (" ^ (String.concat ", " @@ List.map Jlite_structs.string_of_jlite_type params_types) ^ ")"
 
-let negate_relational_op op =
-	match op with 
-	| "<" -> ">="
-	| "<=" -> ">"
-	| ">" -> "<="
-	| ">=" -> "<"
-	| "==" -> "!="
-	| "!=" -> "=="
-	
-let negate_relational_exp 
-	e =
-	match e with 
-	| Idc3Expr ie ->
-		begin
-		match ie with
-		| BoolLiteral3 true -> Idc3Expr (BoolLiteral3 false)
-		| BoolLiteral3 false -> Idc3Expr (BoolLiteral3 true)
-		| Var3 v  -> (BinaryExp3 (RelationalOp"==", Var3 v,BoolLiteral3 false))
-		end
-	| BinaryExp3 (op,idc1,idc2) -> 		
-		begin
-			match op with 
-			| RelationalOp opid -> 
-				let negop =  RelationalOp (negate_relational_op opid) in
-				BinaryExp3 (negop,idc1,idc2)
-			| _ -> failwith (" Error in negate: op is " ^ (string_of_ir3_op op)) 
-		end
-	| _ -> failwith (" Error in negate: e is " ^ (string_of_ir3_exp e))
-		
-(* Transform a list of statements to IR3 *) 
-let rec jlitestmts_to_IR3Stmts 
-	(classid: class_name) 
-	(mthd: md_decl) 
-	(stmtlst:jlite_stmt list)
-	: (var_decl3 list * ir3_stmt list) =
-	match stmtlst with
-		| [] -> ([],[])
-		| s::tail_lst -> 
-			let rec helper s 
-			:( var_decl3 list * ir3_stmt list) =
-			match s with
-			| IfStmt (e, stmts1, stmts2) -> 
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid e false false) in
-				let negatedExp = (negate_relational_exp expr3) in 
-				let (thenvars,thenstmst) = 
-					(jlitestmts_to_IR3Stmts classid mthd stmts1) in 
-				let (elsevars,elsestmts) = 
-					(jlitestmts_to_IR3Stmts classid mthd stmts2) in
-				let gotolabel = fresh_label() in
-				let endlabel =  fresh_label() in
-				let ifIR3 = (IfStmt3 (negatedExp, gotolabel)) in
-				let gotoEndIR3 = (GoTo3 endlabel) in 
-				(exprvars@thenvars@elsevars,
-					exprstmts@(ifIR3::thenstmst)
-					@(gotoEndIR3::((Label3 gotolabel)::elsestmts))
-					@[Label3 endlabel]
-				 )
-			| WhileStmt (e, stmts) -> 
-				let negatedexp = 
-					TypedExp (UnaryExp (UnaryOp "!",e), BoolT) in
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid negatedexp false false) in
-				let (vars,stmst) = 
-					(jlitestmts_to_IR3Stmts classid mthd stmts) in 
-				let looplabel = fresh_label() in
-				let endlabel =  fresh_label() in
-				let ifIR3 = (IfStmt3 (expr3, endlabel)) in
-				let gotoLoopIR3 = (GoTo3 looplabel) in 
-				(exprvars@vars,
-					(Label3 looplabel::exprstmts)@(ifIR3::stmst)
-					@[gotoLoopIR3]@[(Label3 endlabel)]
-				 )
-			| ReturnStmt e ->  
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid e true true) in 
-				let retIR3 = (ReturnStmt3 (iR3Expr_get_id3 expr3)) in 
-				(exprvars,exprstmts@[retIR3])
-			| ReturnVoidStmt ->  
-				([], [ReturnVoidStmt3])
-			| AssignStmt (id,e) ->  
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid e false false) in 
-				begin
-				let assignIR3 = match id with
-				| TypedVarId (id1,t,1) -> 
-					AssignFieldStmt3 (FieldAccess3 ("this",id1), expr3)
-				| TypedVarId (id1,_,2) | SimpleVarId id1 -> 
-					(AssignStmt3 (id1, expr3))
-				in (exprvars, exprstmts@[assignIR3])	
-				end
-			| AssignFieldStmt (id,e) ->  
-				let (idIR3,idvars,idstmts) = 
-					(jliteexpr_to_IR3Expr classid id false false) in 
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid e false false) in 
-				let assignIR3 = (AssignFieldStmt3 (idIR3, expr3)) in 
-				(idvars@exprvars, idstmts@exprstmts@[assignIR3])	
-			| ReadStmt id -> 
-				let (idir3,idvars,idstmts) = 
-					(jlitevarid_to_IR3Expr classid id true) in 	
-				let readIR3 = (ReadStmt3 (iR3Expr_get_id3 idir3)) in 
-				(idvars,idstmts@[readIR3])
-			| PrintStmt e ->  
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid e true false) in 
-				let printIR3 = (PrintStmt3 (iR3Expr_get_idc3 expr3)) in 
-				(exprvars,exprstmts@[printIR3])
-			| MdCallStmt e ->  
-				let (expr3,exprvars,exprstmts) = 
-					(jliteexpr_to_IR3Expr classid e false false) in 
-				let printIR3 = (MdCallStmt3 expr3) in 
-				(exprvars,exprstmts@[printIR3])
-			
-		  in let (vars,stmts) = (helper s) in
-		  let (tailvars,tailstmts) = 
-			(jlitestmts_to_IR3Stmts classid mthd tail_lst) in
-		 (vars@tailvars,stmts@tailstmts)
-  
-(* Transform a method to IR3 *) 
-let jlite_mddecl_to_IR3 cname m  = 
-	let (newvars,newstmts) = 
-		(jlitestmts_to_IR3Stmts cname m m.stmts)
-	in { id3= string_of_var_id m.ir3id;
-		 rettype3=m.rettype; 
-		 params3=(ObjectT cname, "this")::
-			(jlitevar_decl_lst_to_ID3 m.params);
-		 localvars3=
-			(jlitevar_decl_lst_to_ID3 m.localvars)@newvars; 
-		 ir3stmts=newstmts;
-		}
 
-(* Transform a JLite program to IR3 *) 
-let jlite_program_to_IR3 (p:jlite_program):ir3_program=
-	let jlite_class_main_to_IR3 
-		((cname,mmthd):class_main ) =
-		 ((cname,[]),
-			(jlite_mddecl_to_IR3 cname mmthd )) in
-	let rec jlite_class_decl_to_IR3 
-		((cname,cvars,cmthds):class_decl) =
-		let rec helper mthdlst =
-			match mthdlst with 
-			| [] -> []
-			| m::tail_rest -> 
-				(jlite_mddecl_to_IR3 cname m)::
-					( helper tail_rest)
-		in ((cname,
-			(jlitevar_decl_lst_to_ID3 cvars)),
-			(helper cmthds))
-	in 
-	begin
-		let (mainclass, classes) = p in 
-		let (newmainir3, newmainmdir3) =
-			(jlite_class_main_to_IR3 mainclass) in
-		let newir3classesLst = 
-			(List.map jlite_class_decl_to_IR3 classes) in
-		let (newclasses,newmethods) = 
-			(List.split newir3classesLst) in 
-		(newmainir3::newclasses,newmainmdir3,
-			(List.flatten newmethods))
-	end
-	
- 
+let jlite_to_IR3_class_decl (class_name, fds, mds) =
+  let var_table = jlite_to_IR3_var_decls fds in
+  let md_table = List.map (fun v -> (get_method_signature class_name (Jlite_structs.string_of_var_id v.jliteid) (List.map (fun (typ, varid) -> typ) v.params), S.string_of_var_id v.ir3id)) mds in
+  List.iter
+    (fun ((md_sig_str, mapped_name): (string * string)) : unit ->
+      Hashtbl.add method_table md_sig_str mapped_name)
+  md_table;
+  (class_name, var_table)
+
+let iR3_expr_to_id3 (e: S3.ir3_exp) (t: S3.ir3_type) (vars: S3.var_decl3 list) (stmts: S3.ir3_stmt list) (toId3: bool) =
+  if toId3 then
+    match e with
+    | S3.Idc3Expr (S3.Var3 _) -> (e, vars, stmts)
+    | _ ->
+       let new_variable = gen_fresh_var () in
+       (S3.Idc3Expr (S3.Var3 (new_variable)), vars @ [t, new_variable], stmts @ [S3.AssignStmt3 (new_variable, e)])
+  else
+    (e, vars, stmts)
+
+let iR3_expr_get_idc3 (e: S3.ir3_exp) =
+  match e with
+  | S3.Idc3Expr c -> c
+  | _ -> failwith @@ "Cannot find idc3 in " ^ (S3.string_of_ir3_exp e)
+
+let iR3_expr_get_id3 (e: S3.ir3_exp) =
+  match e with
+  | S3.Idc3Expr c ->
+     begin
+       match c with
+       | S3.Var3 i3 -> i3
+       | _ -> failwith @@ "Cannot find id3 in " ^ (S3.string_of_ir3_exp e)
+     end
+  | _ -> failwith @@ "Cannot find id3 in " ^ (S3.string_of_ir3_exp e)
+
+let jlite_to_IR3_varid (class_name: string) (e: S.var_id) (toIdc3: bool) =
+  match e with
+  | TypedVarId (id1, t, 1) ->
+     let newExpr = S3.FieldAccess3 ("this", id1) in
+     iR3_expr_to_id3 newExpr t [] [] toIdc3
+  | TypedVarId (id1, _, 2) | SimpleVarId (id1) -> (S3.Idc3Expr (S3.Var3 (id1)), [], [])
+  | _ -> failwith "Bug in type annotation"
+
+let rec jlite_to_IR3_expr (class_name: string) (e: S.jlite_exp) (toIdc3: bool) (toId3: bool) : (S3.ir3_exp * S3.var_decl3 list * S3.ir3_stmt list) =
+  let rec helper (e: S.jlite_exp) (toIdc3: bool) (toId3: bool) =
+    match e with
+    | S.TypedExp (te, t) ->
+       begin
+         match te with
+         | UnaryExp (op, e) ->
+            let argIR3, vars, stmts = helper e true false in
+            let argIdc3 = iR3_expr_get_idc3 argIR3 in
+            let newExpr = S3.UnaryExp3 (op, argIdc3) in
+            (iR3_expr_to_id3 newExpr t vars stmts toIdc3)
+         | BinaryExp (op, e1, e2) ->
+            let (arg1IR3, vars1, stmts1) = helper e1 true false in
+            let (arg2IR3, vars2, stmts2) = helper e2 true false in
+            let arg1Idc3 = iR3_expr_get_idc3 arg1IR3 in
+            let arg2Idc3 = iR3_expr_get_idc3 arg2IR3 in
+            let newExpr = S3.BinaryExp3 (op, arg1Idc3, arg2Idc3) in
+            (iR3_expr_to_id3 newExpr t (vars1 @ vars2) (stmts1 @ stmts2) toIdc3)
+         | FieldAccess (e, varid) ->
+            let argIR3, vars, stmts = helper e true true in
+            let argId3 = iR3_expr_get_id3 argIR3 in
+            let newExpr = S3.FieldAccess3 (argId3, S.string_of_var_id varid) in
+            iR3_expr_to_id3 newExpr t vars stmts toIdc3
+         | ObjectCreate name ->
+            let newExpr = S3.ObjectCreate3 name in
+            iR3_expr_to_id3 newExpr t [] [] toIdc3
+         | MdCall (e, params) ->
+            let get_type_from_param = function
+              | S.TypedExp (te, t) -> t
+              | _ -> failwith "Bug in type annotation. Params should have type TypedExp"
+            in
+            let params_types = List.map get_type_from_param params in
+            let processed_params = List.map (fun param -> helper param true false) params in
+            let params_idc3 = List.map (fun (a, _, _) -> iR3_expr_get_idc3 a) processed_params in
+            let params_vars = List.flatten @@ List.map (fun (_, b, _) -> b) processed_params in
+            let params_stmts = List.flatten @@ List.map (fun (_, _, c) -> c) processed_params in
+            let get_new_method_name class_name md_name params_types =
+              let method_signature = get_method_signature class_name md_name params_types in
+              assert (Hashtbl.mem method_table method_signature);
+              Hashtbl.find method_table method_signature
+            in
+            begin
+              match e with
+              | FieldAccess (inner_e, varid) ->
+                 begin
+                   match inner_e with
+                   | TypedExp (te, ObjectT name) ->
+                      let argIR3, vars, stmts = helper inner_e true false in
+                      let argIdc3 = iR3_expr_get_idc3 argIR3 in
+                      let new_method_name = get_new_method_name name (S.string_of_var_id varid) params_types in
+                      let newExpr = S3.MdCall3 (new_method_name, argIdc3 :: params_idc3) in
+                      (iR3_expr_to_id3 newExpr t (params_vars @ vars) (params_stmts @ stmts) toIdc3)
+                   | _ -> failwith @@ "Error during type annotation. Got " ^ (S.string_of_jlite_expr inner_e)
+                 end
+              | Var (varid) ->
+                 let new_method_name = get_new_method_name class_name (S.string_of_var_id varid) params_types in
+                 let newExpr = S3.MdCall3 (new_method_name, S3.Var3 ("this") :: params_idc3) in
+                 (iR3_expr_to_id3 newExpr t params_vars params_stmts toIdc3)
+              | _ -> failwith @@ "Error during type annotation. Got " ^ (S.string_of_jlite_expr e)
+            end
+         | BoolLiteral b ->
+            let newExpr = S3.Idc3Expr (S3.BoolLiteral3 b) in
+            iR3_expr_to_id3 newExpr t [] [] toId3
+         | IntLiteral i ->
+            let newExpr = S3.Idc3Expr (S3.IntLiteral3 i) in
+            iR3_expr_to_id3 newExpr t [] [] toId3
+         | StringLiteral s ->
+            let newExpr = S3.Idc3Expr (S3.StringLiteral3 s) in
+            iR3_expr_to_id3 newExpr t [] [] toId3
+         | ThisWord ->
+            let newExpr = S3.Idc3Expr (S3.Var3 "this") in
+            iR3_expr_to_id3 newExpr t [] [] toIdc3
+         | NullWord ->
+            let newExpr = S3.Idc3Expr (S3.Var3 "NULL") in
+            iR3_expr_to_id3 newExpr t [] [] toIdc3
+         | Var (varid) -> jlite_to_IR3_varid class_name varid toIdc3
+         | TypedExp (_, _) -> failwith "TypedExp cannot contain another TypedExp"
+       end
+    | _ -> failwith @@ "Every jLite_exp should be wrapped by TypedExp. Got " ^ (S.string_of_jlite_expr e)
+  in
+  helper e toIdc3 toId3
+
+let rec jlite_to_IR3_stmts (class_name: S.class_name) (md: S.md_decl) (stmts: S.jlite_stmt list) : (S3.var_decl3 list * S3.ir3_stmt list) =
+  match stmts with
+  | [] -> ([], [])
+  | stmt :: tail ->
+     let rec helper s =
+       match s with
+       | IfStmt (e, true_stmts, false_stmts) ->
+          let (expr3, exprvars, exprstmts) = jlite_to_IR3_expr class_name e false false in
+          let (truevars, truestmts) = jlite_to_IR3_stmts class_name md true_stmts in
+          let (falsevars, falsestmts) = jlite_to_IR3_stmts class_name md false_stmts in
+          let true_label = gen_label () in
+          let end_label = gen_label () in
+          let goto_end = S3.GoTo3 end_label in
+          let ifIR3 = S3.IfStmt3 (expr3, true_label) in
+          (exprvars @ truevars @ falsevars,
+           [ifIR3] @
+             falsestmts @ [goto_end] @
+               [S3.Label3 true_label] @ truestmts @
+                 [S3.Label3 end_label])
+       | WhileStmt (e, bstmts) ->
+          let (expr3, exprvars, exprstmts) = jlite_to_IR3_expr class_name e false false in
+          let (stmtsvars, stmtsstmts) = jlite_to_IR3_stmts class_name md bstmts in
+          let begin_cond_label = gen_label () in
+          let begin_code_label = gen_label () in
+          let end_label = gen_label () in
+          let goto_cond = S3.GoTo3 begin_cond_label in
+          let goto_end = S3.GoTo3 end_label in
+          let ifIR3 = S3.IfStmt3 (expr3, begin_code_label) in
+          (exprvars @ stmtsvars,
+           [S3.Label3 begin_cond_label] @
+             exprstmts @ [ifIR3] @ [goto_end] @
+               [S3.Label3 begin_code_label] @ stmtsstmts @ [goto_cond] @
+                 [S3.Label3 end_label])
+       | ReadStmt (varid) ->
+          let readIR3 = match varid with
+            | TypedVarId (id1, t, 1) -> S3.ReadStmt3 (id1)
+            | TypedVarId (id1, _, 2) | SimpleVarId (id1) -> S3.ReadStmt3 (id1)
+            | _ -> failwith "Bug in type annotation"
+          in
+          ([], [readIR3])
+       | PrintStmt e ->
+          let (expr3, exprvars, exprstmts) = jlite_to_IR3_expr class_name e true false in
+          let argIdc3 = iR3_expr_get_idc3 expr3 in
+          let printIR3 = S3.PrintStmt3 argIdc3 in
+          (exprvars, exprstmts @ [printIR3])
+       | AssignStmt (varid, e) ->
+          let (expr3, exprvars, exprstmts) = jlite_to_IR3_expr class_name e false false in
+          begin
+            let assignIR3 = match varid with
+              (* Class scope *)
+              | TypedVarId (id1, t, 1) ->
+                 S3.AssignFieldStmt3 (S3.FieldAccess3 ("this", id1), expr3)
+              | TypedVarId (id1, _, 2) | SimpleVarId id1 ->
+                 S3.AssignStmt3 (id1, expr3)
+              | _ -> failwith "Bug in type annotation"
+            in
+            (exprvars, exprstmts @ [assignIR3])
+          end
+       | AssignFieldStmt (e1, e2) ->
+          let (exprl3, exprlvars, exprlstmts) = jlite_to_IR3_expr class_name e1 false false in
+          let (exprr3, exprrvars, exprrstmts) = jlite_to_IR3_expr class_name e2 false false in
+          let assignIR3 = S3.AssignFieldStmt3 (exprl3, exprr3) in
+          (exprlvars @ exprrvars, exprlstmts @ exprrstmts @ [assignIR3])
+       | MdCallStmt e ->
+          let (expr3, exprvars, exprstmts) = jlite_to_IR3_expr class_name e false false in
+          let mdCallIR3 = S3.MdCallStmt3 expr3 in
+          (exprvars, exprstmts @ [mdCallIR3])
+       | ReturnStmt e ->
+          let (expr3, exprvars, exprstmts) = jlite_to_IR3_expr class_name e true true in
+          let retIR3 = S3.ReturnStmt3 (iR3_expr_get_id3 expr3) in
+          (exprvars, exprstmts @ [retIR3])
+       | ReturnVoidStmt -> ([], [S3.ReturnVoidStmt3])
+     in
+     let (vars, stmts) = (helper stmt) in
+     let (tailvars, tailstmts) = jlite_to_IR3_stmts class_name md tail in
+     (vars @ tailvars, stmts @ tailstmts)
+       
+let jlite_to_IR3_method_decl (class_name: S.class_name) (md_decl: S.md_decl) : S3.md_decl3 =
+  (* We can reset the variable counter *)
+  fresh_var_counter := 0;
+  let (nvars, nstmts) = jlite_to_IR3_stmts class_name md_decl md_decl.stmts in
+  {
+    S3.id3 = Jlite_structs.string_of_var_id md_decl.ir3id;
+    S3.rettype3 = md_decl.rettype;
+    S3.params3 = (ObjectT class_name, "this") :: (jlite_to_IR3_var_decls md_decl.params);
+    S3.localvars3 = (jlite_to_IR3_var_decls md_decl.localvars) @ nvars;
+    S3.ir3stmts = nstmts
+  }
+
+let jlite_to_IR3_aux_classes (aux_classes: (S.class_name * (S.var_decl list) * (S.md_decl list)) list) =
+  let process_class_methods (class_name, var_decls, md_decls) =
+    List.map (jlite_to_IR3_method_decl class_name) md_decls
+  in
+  List.flatten @@ List.map process_class_methods aux_classes
+
+let jlite_program_to_IR3 prog =
+  let main_class, aux_classes = prog in
+  let (main_class_name, main_class_method) = main_class in
+  (* These two have to be done first as they write to the global method table *)
+  let main_class_decl_ir3 = jlite_to_IR3_class_decl (main_class_name, [], [main_class_method]) in
+  let aux_classes_decls_ir3 = List.map jlite_to_IR3_class_decl aux_classes in
+  (* Now process the methods *)
+  let main_class_md_ir3 = jlite_to_IR3_method_decl main_class_name main_class_method in
+  let aux_classes_mds_ir3 = jlite_to_IR3_aux_classes aux_classes in
+  main_class_decl_ir3 :: aux_classes_decls_ir3, main_class_md_ir3, aux_classes_mds_ir3
