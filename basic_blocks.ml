@@ -100,9 +100,12 @@ let rec split_by_leader (fn: (bool * ir3_stmt) list): block list =
     begin
       match split_by_leader(tail) with
       | [] -> let blk = fresh_blk() in
+        if boolean = true then
+        [fresh_blk ()] @ [{ blk with lines = [fresh_line head] }]
+        else
         [{ blk with lines = [fresh_line head] }]
       | arr_head::tail ->
-        if boolean == true then
+        if boolean = true then
           let finished_block = {
             arr_head with lines = (fresh_line head)::arr_head.lines
           } in [fresh_blk()] @ [finished_block] @tail
@@ -115,6 +118,7 @@ let rec split_by_leader (fn: (bool * ir3_stmt) list): block list =
 
 let fn_to_basic_blocks (fn: (ir3_stmt list)) =
   let stmts_with_leaders = identify_leaders fn in
+  (* List.iter (fun (b, s) -> print_endline (string_of_bool b ^ string_of_ir3_stmt s)) stmts_with_leaders; *)
   split_by_leader stmts_with_leaders
 
 let string_of_id3_set (set: id3_set) =
@@ -178,12 +182,12 @@ let find_dest_of_jump (blks: (block list)) (jump) (id_to_fn) =
     | IfStmt3 (_, lb) -> string_of_int lb
     | _ -> failwith "Unknown jump type"
   in
-  print_endline ("TARGET: " ^ target);
+  (* print_endline ("TARGET: " ^ target); *)
   let identify_dest blk =
     match blk.lines with
     | [] -> false
     | hd::tail -> (
-        print_endline ("HEAD: " ^ string_of_ir3_stmt hd.stmt);
+        (* print_endline ("HEAD: " ^ string_of_ir3_stmt hd.stmt); *)
         match hd.stmt with
         | (Label3 label) -> (string_of_int label) = target
         | _ -> blk.id = target
@@ -200,7 +204,7 @@ let get_flow_graph (blks: (block list)) exit_node id_to_fn =
   in
   let _ = Hashtbl.add tbl_out "start" [(List.hd blks).id] in
   (* let _ = Hashtbl.add tbl_out (List.hd (List.rev blks)).id ["exit"] in *)
-  List.iter (fun blk -> print_endline (string_of_basic_block blk)) blks;
+  (* List.iter (fun blk -> print_endline (string_of_basic_block blk)) blks; *)
   let rec join_all_blocks sub_blks: unit =
     match sub_blks with
     | [] -> ();
@@ -212,7 +216,7 @@ let get_flow_graph (blks: (block list)) exit_node id_to_fn =
         let _ = (
           match jump with
           | Some inst ->
-            print_endline ("jump is " ^ string_of_ir3_stmt inst);
+            (* print_endline ("jump is " ^ string_of_ir3_stmt inst); *)
             let entry = Hashtbl.find tbl_out head.id in
             let dest_id = (find_dest_of_jump blks inst id_to_fn).id in
             if not(List.mem dest_id entry) then

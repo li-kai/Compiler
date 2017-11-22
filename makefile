@@ -71,18 +71,18 @@ run:
 
 ############
 test: jlite_main
-	- OCAMLRUNPARAM=b ./$< armTests/fib.j #> armTests/fib.arm
-	- OCAMLRUNPARAM=b ./$< armTests/fact.j #> armTests/fact.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_functions.j # > armTests/test_functions.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_strength.j # > armTests/test_strength.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_fields.j #> armTests/test_fields.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_ops.j #> armTests/test_ops.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/simple.j #> armTests/simple.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/telegram.j #> armTests/telegram.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_print.j #> armTests/test_print.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_spill.j #> armTests/test_spill.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_5params.j #> armTests/test_5params.arm
-	# - OCAMLRUNPARAM=b ./$< armTests/test_assign.j #> armTests/test_assign.arm
+	OCAMLRUNPARAM=b ./$< armTests/fib.j > armTests/fib.arm
+	OCAMLRUNPARAM=b ./$< armTests/fact.j > armTests/fact.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_functions.j > armTests/test_functions.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_strength.j > armTests/test_strength.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_fields.j > armTests/test_fields.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_ops.j > armTests/test_ops.arm
+	OCAMLRUNPARAM=b ./$< armTests/simple.j > armTests/simple.arm
+	OCAMLRUNPARAM=b ./$< armTests/telegram.j > armTests/telegram.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_print.j > armTests/test_print.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_spill.j > armTests/test_spill.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_5params.j > armTests/test_5params.arm
+	OCAMLRUNPARAM=b ./$< armTests/test_assign.j > armTests/test_assign.arm
 
 unit_basic_block: tests/basic_blocks_test.ml
 	$(OCAMLF) ocamlc -o tests/basic_block_test -package oUnit -linkpkg -g jlite_structs.ml ir3_structs.ml basic_blocks.ml $<
