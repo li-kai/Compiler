@@ -74,6 +74,7 @@ test: jlite_main
 	- OCAMLRUNPARAM=b ./$< armTests/fib.j #> armTests/fib.arm
 	- OCAMLRUNPARAM=b ./$< armTests/fact.j #> armTests/fact.arm
 	- OCAMLRUNPARAM=b ./$< armTests/test_functions.j # > armTests/test_functions.arm
+	# - OCAMLRUNPARAM=b ./$< armTests/test_strength.j # > armTests/test_strength.arm
 	# - OCAMLRUNPARAM=b ./$< armTests/test_fields.j #> armTests/test_fields.arm
 	# - OCAMLRUNPARAM=b ./$< armTests/test_ops.j #> armTests/test_ops.arm
 	# - OCAMLRUNPARAM=b ./$< armTests/simple.j #> armTests/simple.arm
