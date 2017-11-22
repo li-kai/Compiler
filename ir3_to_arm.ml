@@ -101,15 +101,19 @@ let convert_idc3 (idc3: Ir3_structs.idc3) (reg: string) (md3: Ir3_structs.md_dec
       lbl_instr, ([load_instr], [])
     end
   | Var3 v ->
-    let pref_reg = (
-        match Hashtbl.find_opt idc3_to_reg v with
-          | Some x -> x
-          | None -> reg (* I'm confused, where do I put "spill" *)
-    ) in
     let offset = offset_of_var md3 v in
-      let left = [LDR ("", "", pref_reg, RegPreIndexed ("fp", -offset, false))] in
-    let right = [STR ("", "", pref_reg, RegPreIndexed ("fp", -offset, false))] in
-    [], (left, right)
+    let reg_pre_indexed = RegPreIndexed ("fp", -offset, false) in
+    let pair = (
+        match Hashtbl.find_opt idc3_to_reg v with
+          | Some "spill" | None ->
+            (* TODO: place in frame pointer but offset how much? *)
+            let spill = RegPreIndexed ("fp", -offset, false) in
+            let bef = [STR ("", "", "v0", spill); LDR ("", "", "v0", reg_pre_indexed)] in
+            let aft = [STR ("", "", "v0", reg_pre_indexed); LDR ("", "", "v0", spill)] in
+            (bef, aft)
+          | Some x -> ([LDR ("", "", x, reg_pre_indexed)], [])
+    ) in
+    [], pair
 
 let prepare_md_call (args: Ir3_structs.idc3 list) (md3: Ir3_structs.md_decl3) : arm_program * (arm_program * arm_program) =
   let rev_args = List.rev args in
