@@ -16,7 +16,7 @@ type line = {
   live: id3_set;
 }
 
-type block_id = int
+type block_id = string
 type block =
   {
     id: block_id;
@@ -47,21 +47,21 @@ type block =
 
 let identify_leaders (fn: (ir3_stmt list)) =
   let rec helper (fn: (ir3_stmt list)) =
+    let make_leader pre tail =
+      match helper(tail) with
+        | [] -> (false, pre)::[]
+        | (_, new_stmt)::new_tail -> (false, pre)::(true, new_stmt)::new_tail
+    in
     match fn with
       | [] -> []
       (* Target of a jump // assume all labels are used *)
       | (Label3 label)::tail -> (true, Label3 label)::helper(tail)
       (* Following a jump *)
-      | (IfStmt3 (x, y))::tail -> (
-        match helper(tail) with
-          | [] -> (false, IfStmt3 (x, y))::[]
-          | (_, new_stmt)::new_tail -> (false, IfStmt3 (x, y))::(true, new_stmt)::new_tail
-      )
-      | (GoTo3 label)::tail -> (
-        match helper(tail) with
-          | [] -> (false, GoTo3 label)::[]
-          | (_, new_stmt)::new_tail -> (false, GoTo3 label)::(true, new_stmt)::new_tail
-      )
+      | (ReturnStmt3 x)::tail -> make_leader (ReturnStmt3 x) tail
+      | (ReturnVoidStmt3)::tail -> make_leader (ReturnVoidStmt3) tail
+      | (MdCallStmt3 x)::tail -> make_leader (MdCallStmt3 x) tail
+      | (GoTo3 x)::tail -> make_leader (GoTo3 x) tail
+      | (IfStmt3 (x, y))::tail -> make_leader (IfStmt3 (x, y)) tail
       | head::tail -> (false, head)::helper(tail)
   in
   (* First instruction is false because new head block is always created in split_by_leader *)
@@ -72,7 +72,7 @@ let identify_leaders (fn: (ir3_stmt list)) =
 let blkcount = ref (-1)
 let fresh_blk () =
   blkcount:= !blkcount + 1;
-  { id = !blkcount;
+  { id = string_of_int !blkcount;
     lines = [];
     live_in = Id3Set.empty;
     live_out = Id3Set.empty;
@@ -122,7 +122,7 @@ let string_of_line (line: line) =
   ^ "\n\tLive: " ^ live_str
 
 let string_of_basic_block (blk: block) =
-  "\nId " ^ string_of_int blk.id ^ " lines: " ^ (string_of_indented_stmt_list "\n"  string_of_line blk.lines)
+  "\nId " ^ blk.id ^ " lines: " ^ (string_of_indented_stmt_list "\n"  string_of_line blk.lines)
 
 (*
   Algorithm 8.7: Determining the liveness and next-use
@@ -224,3 +224,141 @@ let rec get_liveness_of_basic_block (blk: block) =
 
 let get_liveness_of_basic_blocks (blks: (block list)) =
   List.map get_liveness_of_basic_block blks
+
+(*
+  Algorithm 8.4.3 Flow Graph
+
+  Input: A list of basic blocks
+
+  Output: A flow graph with def and use computed for each block
+
+  Method:
+    - There is an edge from block B to block C if and only if
+      it is possible for the first instruction in block C to
+      immediately follow the last instruction in block B.
+    - There are two ways that such an edge could be justified:
+      1. There is a conditional or unconditional jump from the end of B
+         to the beginning of C.
+      2. C immediately follows B in the original order of
+         the three-address instructions, and B does not end
+         in an unconditional jump.
+ *)
+(* We use an adjacency list to determine the edges *)
+let empty_block = {
+  id = "";
+  lines = [];
+  live_in = Id3Set.empty;
+  live_out = Id3Set.empty;
+}
+
+let rec find_jump (fn: (line list)): (ir3_stmt option) =
+  match fn with
+    | [] -> None
+    | line::[] -> (
+      match line.stmt with
+        | GoTo3 _ | MdCallStmt3 _ | IfStmt3 _ -> Some line.stmt
+        | _ -> None
+    )
+    | head::tail -> find_jump(tail)
+
+let find_dest_of_jump (blks: (block list)) (jump) =
+  let target = match jump with
+    | GoTo3 lb -> string_of_int lb
+    | MdCallStmt3 x -> (
+      match x with
+        | MdCall3 (md, _) -> md
+        | _ -> failwith "What is the method calling?"
+      )
+    | IfStmt3 (_, lb) -> string_of_int lb
+    | _ -> failwith "Unknown jump type"
+  in
+  let identify_dest blk =
+    match blk.lines with
+      | [] -> false
+      | hd::tail -> (
+        match hd.stmt with
+          | (Label3 label) -> (string_of_int label) = target
+          | _ -> blk.id = target
+      )
+  in
+  List.find identify_dest blks
+
+let get_flow_graph (blks: (block list)) =
+  let start_block = { empty_block with id = "start" } in
+  let exit_block = { empty_block with id = "exit" } in
+  let all_blocks = [start_block]@blks@[exit_block] in
+  let tbl_out = Hashtbl.create (List.length all_blocks) in
+  let _ =
+    List.iter (fun blk -> Hashtbl.add tbl_out blk.id Id3Set.empty) all_blocks
+  in
+  let rec join_all_blocks blks: unit =
+    match blks with
+      | [] -> ();
+      | exit::[] -> ();
+      | head::next::tail ->
+        let jump = find_jump head.lines in
+        (* 1. There is a conditional or unconditional jump from the end of B
+         to the beginning of C. *)
+        let _ = (
+          match jump with
+          | Some inst ->
+            let entry = Hashtbl.find tbl_out head.id in
+            let dest_id = (find_dest_of_jump blks inst).id in
+            let new_set = Id3Set.add dest_id entry in
+            Hashtbl.add tbl_out head.id new_set;
+          | None -> ()
+        ) in
+        (* 2. C immediately follows B in the original order of
+         the three-address instructions, and B does not end
+         in an unconditional jump. *)
+        let _ = (
+          match jump with
+            | Some (GoTo3 _) | Some (MdCallStmt3 _) -> ()
+            (* Any other type are true *)
+            | _ ->
+              let entry = Hashtbl.find tbl_out head.id in
+              let new_set = Id3Set.add next.id entry in
+              Hashtbl.add tbl_out head.id new_set;
+        ) in
+        join_all_blocks (next::tail);
+  in
+  let _ = join_all_blocks blks in
+  tbl_out
+
+type block_collection = {
+  blocks: block list;
+  edges_out: (string, id3_set) Hashtbl.t;
+}
+
+let prog_to_blocks (prog: ir3_program): block_collection =
+  let (c_list, c_mthd, mthd_list) = prog in
+  let all_methods = c_mthd::mthd_list in
+  let make_block mthd: block list =
+    let mthd_blks = fn_to_basic_blocks mthd.ir3stmts in
+    match mthd_blks with
+      | [] -> []
+      | hd::tail -> { hd with id = mthd.id3 }::tail
+  in
+  let all_blocks = List.flatten (List.map make_block all_methods) in
+  {
+    blocks = all_blocks;
+    edges_out = get_flow_graph all_blocks;
+  }
+
+(*
+  Algorithm 9.14 Live-variable analysis
+
+  Input: A flow graph with def and use computed for each block
+
+  Ouput: IN[B] and OUT[B], the set of variables live on entry and
+  exit of each block B of the flow graph
+
+  Method:
+    IN[EXIT] = null set
+    for (each basic block B other than EXIT) IN[B] = null set;
+    while (changes to any IN occur)
+      for (each basic block B other than EXIT) {
+        OUT[B] = U_S a successor of B IN[S];
+        IN[B] = use_B union (OUT[B] - def_B);
+      }
+ *)

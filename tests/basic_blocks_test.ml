@@ -66,7 +66,7 @@ let make_lines (stmts) =
   List.map (fun stmt -> { default_stmt with stmt; }) stmts
 
 let make_block (id: int) lines = {
-  id;
+  id = string_of_int id;
   lines;
   live_in = Id3Set.empty;
   live_out = Id3Set.empty;
