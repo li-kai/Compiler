@@ -47,6 +47,11 @@ let process prog =
 
     let asmprog = Ir3_to_arm.prog_to_arm ir3prog in
     print_string (Arm_structs.string_of_arm_prog asmprog);
+
+    let prog_blocks = Basic_blocks.prog_to_blocks ir3prog in
+    ()
+    (* let new_basic_blocks = Global_optimization.Liveness_analysis.obtain_new_basic_blocks prog_blocks in
+     * print_endline @@ Global_optimization.Liveness_analysis.string_of_new_basic_blocks new_basic_blocks *)
   end
 let _ =
   begin
