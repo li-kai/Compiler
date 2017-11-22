@@ -1,7 +1,7 @@
 ############
 DIFF=/usr/bin/diff -sb
 OCAMLF=/usr/bin/env ocamlfind
-OCAMLC=/usr/bin/env ocamlc
+OCAMLC=/usr/bin/env ocamlc -g
 OCAMLLEX=/usr/bin/env ocamllex
 OCAMLYACC=/usr/bin/env ocamlyacc
 ARM=arm-linux-gnueabi-g++-4.7
@@ -35,6 +35,12 @@ ir3_to_arm.cmo: ir3_to_arm.ml
 optimize_ir3.cmo: optimize_ir3.ml
 	$(OCAMLC) -c $<
 
+graph.cmo: graph.ml
+	$(OCAMLC) -c $<
+
+global_optimization.cmo: global_optimization.ml
+	$(OCAMLC) -c $<
+
 jlite_parser.ml: jlite_parser.mli
 	$(OCAMLC) -c $<
 
@@ -44,13 +50,13 @@ jlite_parser.mli: jlite_parser.mly
 jlite_lexer.ml: jlite_lexer.mll
 	$(OCAMLLEX) $<
 
-compile: jlite_structs.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo basic_blocks.cmo jlite_parser.ml jlite_lexer.ml ir3_to_arm.cmo optimize_ir3.cmo
+compile: graph.cmo jlite_structs.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo basic_blocks.cmo global_optimization.cmo jlite_parser.ml jlite_lexer.ml ir3_to_arm.cmo optimize_ir3.cmo
 	$(OCAMLC) -c jlite_lexer.ml
 	$(OCAMLC) -c jlite_parser.ml
 	$(OCAMLC) -c jlite_main.ml
 
 jlite_main: compile
-	$(OCAMLC) -o jlite_main jlite_structs.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo ir3_to_arm.cmo optimize_ir3.cmo jlite_main.cmo
+	$(OCAMLC) -o jlite_main jlite_structs.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo ir3_to_arm.cmo graph.cmo basic_blocks.cmo global_optimization.cmo optimize_ir3.cmo jlite_main.cmo
 
 ############
 run:
