@@ -401,7 +401,7 @@ module Liveness_analysis_computation : Data_flow_computation = struct
         | hd::tl -> hd, tl
         | [] -> failwith "Impossible"
       in
-      List.fold_left (fun a b -> StringSet.inter a b) hd tl
+      List.fold_left (fun a b -> StringSet.union a b) hd tl
 end
 
 module Liveness_analysis = MkBackwardDataFlowAnalysis (Liveness_analysis_computation)
