@@ -92,7 +92,9 @@ constant expressions by their value.
 ./jlite main [option] armTests/simple.j
 ```
 
--O    Enable all optimizations
+Flags:
+	-O    Enable all optimizations
+
 
 ## Notes
 
