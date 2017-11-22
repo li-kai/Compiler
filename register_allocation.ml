@@ -82,18 +82,24 @@ let linear_scan (intvs: live_interval list) =
     let helper (key: interval) (id: id3) =
       let (start_j, end_j) = key in
       if end_j < start_i then
-        let free_reg = Intv_to_id.find key lsra.active in
+        let id = Intv_to_id.find key lsra.active in
+        let free_reg = Hashtbl.find lsra.result_tbl id in
         lsra.active <- Intv_to_id.remove key lsra.active;
         lsra.free_reg <- free_reg::lsra.free_reg;
     in Intv_to_id.iter helper lsra.active
   in
   let spill_at_interval (intv: live_interval) =
     (* Find the last register that is going to be freed  *)
-    let (spill_intv, spill_id) = Intv_to_id.max_binding lsra.active in
+    let find_max z =
+      let id = Intv_to_id.find z lsra.active in
+      id != "spill"
+    in
+    let (spill_intv, spill_id) = Intv_to_id.find_first find_max lsra.active in
     let (start_spill, end_spill) = spill_intv in
     let (start_replace, end_replace) = intv.intv in
     if end_spill > end_replace then
-      let reg = Hashtbl.find lsra.result_tbl spill_id in
+    let reg = Hashtbl.find lsra.result_tbl spill_id in
+      let _ = List.find (fun r -> r = reg) registers in
       Hashtbl.add lsra.result_tbl intv.id reg;
       Hashtbl.replace lsra.result_tbl spill_id "spill";
     else
@@ -109,6 +115,7 @@ let linear_scan (intvs: live_interval list) =
       (* Indicate that interval is being served by a register *)
       lsra.active <- Intv_to_id.add intv.intv intv.id lsra.active;
       lsra.free_reg <- List.tl lsra.free_reg;
+      let _ = List.find (fun r -> r = to_be_used) registers in
       Hashtbl.add lsra.result_tbl intv.id to_be_used;
   in let _ = List.iter def_reg sorted_intvs in
   (* let accum_results (k: id3) (v: register) (acc: result list) =
@@ -327,7 +334,7 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) = struct
     (* Create empty adjacency list *)
     let () = Hashtbl.iter (fun k _ -> Hashtbl.add g (Hashtbl.find block_map k) []) block_map in
     let () = Hashtbl.iter (fun k _ -> Hashtbl.add grev (Hashtbl.find block_map k) []) block_map in
-    Hashtbl.iter (fun k v -> print_endline @@ "Got " ^ k ^ " -> " ^ (string_of_int v)) block_map;
+    (* Hashtbl.iter (fun k v -> print_endline @@ "Got " ^ k ^ " -> " ^ (string_of_int v)) block_map; *)
     let process_edge_entry k v =
       let from_vertex = Hashtbl.find block_map k in
       List.iter
@@ -374,7 +381,7 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) = struct
 
   let obtain_new_basic_blocks block_collection : new_basic_block list =
     let block_lst = block_collection.Basic_blocks.blocks in
-    List.iter (fun x -> print_endline @@ "Has node " ^ x.Basic_blocks.id) block_lst;
+    (* List.iter (fun x -> print_endline @@ "Has node " ^ x.Basic_blocks.id) block_lst; *)
     let edges = block_collection.Basic_blocks.edges_out in
     let old_blocks_arr = Array.of_list block_lst in
     let new_blocks_arr = Array.of_list @@ List.map (fun block -> new_default_block block) block_lst in
