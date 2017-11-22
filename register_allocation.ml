@@ -484,9 +484,11 @@ module Liveness_analysis_computation = struct
       match lines with
         | [] -> []
         | line :: [] ->  (* Final stmt live out is empty *)
-          (* TODO: Incorporate init *)
           let next_use = (find_used_vars line.Basic_blocks.stmt) in
-          next_use::[]
+          let not_used = (find_not_used line.Basic_blocks.stmt) in
+          let diffed = (StringSet.diff init not_used) in
+          let live = StringSet.union diffed next_use in
+          live::[]
         | line :: tail ->
           let computed = helper tail in
           let head = List.hd computed in
