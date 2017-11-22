@@ -226,7 +226,7 @@ let rec jlite_to_IR3_stmts (class_name: S.class_name) (md: S.md_decl) (stmts: S.
      let (vars, stmts) = (helper stmt) in
      let (tailvars, tailstmts) = jlite_to_IR3_stmts class_name md tail in
      (vars @ tailvars, stmts @ tailstmts)
-       
+
 let jlite_to_IR3_method_decl (class_name: S.class_name) (md_decl: S.md_decl) : S3.md_decl3 =
   (* We can reset the variable counter *)
   fresh_var_counter := 0;
@@ -253,5 +253,6 @@ let jlite_program_to_IR3 prog =
   let aux_classes_decls_ir3 = List.map jlite_to_IR3_class_decl aux_classes in
   (* Now process the methods *)
   let main_class_md_ir3 = jlite_to_IR3_method_decl main_class_name main_class_method in
+  let main_class_md_ir3 = { main_class_md_ir3 with S3.id3 = "main" } in
   let aux_classes_mds_ir3 = jlite_to_IR3_aux_classes aux_classes in
   main_class_decl_ir3 :: aux_classes_decls_ir3, main_class_md_ir3, aux_classes_mds_ir3
