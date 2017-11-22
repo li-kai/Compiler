@@ -107,11 +107,19 @@ Int Func(MyClass this) {
 
 #### Strength Reduction
 
-Strength reduction replaces a more expensive operator by a cheaper one example 
+Strength reduction replaces a more expensive operator by a cheaper one.
 
 
-```ocaml
-2 * X = X + X
+```java
+Int twice;
+twice = 2 * X;
+```
+
+is transformed to
+
+```java
+Int twice;
+twice = X + X;
 ```
 
 #### Constant Folding
