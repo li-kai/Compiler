@@ -41,6 +41,12 @@ optimize_ir3.cmo: optimize_ir3.ml
 graph.cmo: graph.ml
 	$(OCAMLC) -c $<
 
+jlite_report.cmo: jlite_report.ml
+	$(OCAMLC) -c $<
+
+jlite_duplicate_check.cmo: jlite_duplicate_check.ml
+	$(OCAMLC) -c $<
+
 jlite_parser.ml: jlite_parser.mli
 	$(OCAMLC) -c $<
 
@@ -50,13 +56,13 @@ jlite_parser.mli: jlite_parser.mly
 jlite_lexer.ml: jlite_lexer.mll
 	$(OCAMLLEX) $<
 
-compile: graph.cmo jlite_structs.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo basic_blocks.cmo optimize_ir3.cmo register_allocation.cmo jlite_parser.ml jlite_lexer.ml ir3_to_arm.cmo
+compile: jlite_report.cmo graph.cmo jlite_structs.cmo jlite_duplicate_check.cmo ir3_structs.cmo jlite_annotatedtyping.cmo jlite_toir3.cmo arm_structs.cmo basic_blocks.cmo optimize_ir3.cmo register_allocation.cmo jlite_parser.ml jlite_lexer.ml ir3_to_arm.cmo
 	$(OCAMLC) -c jlite_lexer.ml
 	$(OCAMLC) -c jlite_parser.ml
 	$(OCAMLC) -c jlite_main.ml
 
 jlite_main: compile
-	$(OCAMLC) -o jlite_main graph.cmo jlite_structs.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo jlite_toir3.cmo jlite_annotatedtyping.cmo arm_structs.cmo basic_blocks.cmo register_allocation.cmo optimize_ir3.cmo ir3_to_arm.cmo jlite_main.cmo
+	$(OCAMLC) -o jlite_main jlite_report.cmo graph.cmo jlite_structs.cmo jlite_duplicate_check.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo jlite_annotatedtyping.cmo jlite_toir3.cmo arm_structs.cmo basic_blocks.cmo register_allocation.cmo optimize_ir3.cmo ir3_to_arm.cmo jlite_main.cmo
 
 ############
 run:
