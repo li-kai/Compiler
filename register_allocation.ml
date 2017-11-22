@@ -327,7 +327,6 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) = struct
     (* Create empty adjacency list *)
     let () = Hashtbl.iter (fun k _ -> Hashtbl.add g (Hashtbl.find block_map k) []) block_map in
     let () = Hashtbl.iter (fun k _ -> Hashtbl.add grev (Hashtbl.find block_map k) []) block_map in
-    Hashtbl.iter (fun k v -> print_endline @@ "Got " ^ k ^ " -> " ^ (string_of_int v)) block_map;
     let process_edge_entry k v =
       let from_vertex = Hashtbl.find block_map k in
       List.iter
@@ -374,7 +373,6 @@ module MkBackwardDataFlowAnalysis (Dfc: Data_flow_computation) = struct
 
   let obtain_new_basic_blocks block_collection : new_basic_block list =
     let block_lst = block_collection.Basic_blocks.blocks in
-    List.iter (fun x -> print_endline @@ "Has node " ^ x.Basic_blocks.id) block_lst;
     let edges = block_collection.Basic_blocks.edges_out in
     let old_blocks_arr = Array.of_list block_lst in
     let new_blocks_arr = Array.of_list @@ List.map (fun block -> new_default_block block) block_lst in
