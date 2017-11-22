@@ -9,7 +9,6 @@ module StringSet = Set.Make(
   end
   );;
 type id3_set = StringSet.t
-type block_id_set = StringSet.t
 
 type line = {
   no: int;
@@ -88,7 +87,7 @@ let linecount = ref (-1)
 
 let fresh_line (stmt) =
   {
-    no = !linecount + 1;
+    no = 0;
     stmt;
     next_use = StringSet.empty;
     live = StringSet.empty;
@@ -296,7 +295,7 @@ let get_flow_graph (blks: (block list)) =
   let all_blocks = [start_block]@blks@[exit_block] in
   let tbl_out = Hashtbl.create (List.length all_blocks) in
   let _ =
-    List.iter (fun blk -> Hashtbl.add tbl_out blk.id StringSet.empty) all_blocks
+    List.iter (fun blk -> Hashtbl.add tbl_out blk.id []) all_blocks
   in
   let rec join_all_blocks blks: unit =
     match blks with
@@ -306,36 +305,70 @@ let get_flow_graph (blks: (block list)) =
       let jump = find_jump head.lines in
       (* 1. There is a conditional or unconditional jump from the end of B
          to the beginning of C. *)
-      let _ = (
-        match jump with
-        | Some inst ->
-          let entry = Hashtbl.find tbl_out head.id in
-          let dest_id = (find_dest_of_jump blks inst).id in
-          let new_set = StringSet.add dest_id entry in
-          Hashtbl.add tbl_out head.id new_set;
-        | None -> ()
-      ) in
-      (* 2. C immediately follows B in the original order of
+        let _ = (
+          match jump with
+          | Some inst ->
+            let entry = Hashtbl.find tbl_out head.id in
+            let dest_id = (find_dest_of_jump blks inst).id in
+            if not(List.mem dest_id entry) then
+              Hashtbl.add tbl_out head.id (dest_id::entry);
+          | None -> ()
+        ) in
+        (* 2. C immediately follows B in the original order of
          the three-address instructions, and B does not end
          in an unconditional jump. *)
-      let _ = (
-        match jump with
-        | Some (GoTo3 _) | Some (MdCallStmt3 _) -> ()
-        (* Any other type are true *)
-        | _ ->
-          let entry = Hashtbl.find tbl_out head.id in
-          let new_set = StringSet.add next.id entry in
-          Hashtbl.add tbl_out head.id new_set;
-      ) in
-      join_all_blocks (next::tail);
+        let _ = (
+          match jump with
+            | Some (GoTo3 _) | Some (MdCallStmt3 _) -> ()
+            (* Any other type are true *)
+            | _ ->
+              let entry = Hashtbl.find tbl_out head.id in
+              if not(List.mem next.id entry) then
+                Hashtbl.add tbl_out head.id (next.id::entry);
+        ) in
+        join_all_blocks (next::tail);
   in
   let _ = join_all_blocks blks in
   tbl_out
 
 type block_collection = {
   blocks: block list;
-  edges_out: (block_id, block_id_set) Hashtbl.t;
+  edges_out: (block_id, block_id list) Hashtbl.t;
 }
+
+type 'a adj_list = ('a, 'a list) Hashtbl.t
+
+(* Returns postorder traversal of the graph, which is a valid toposort if the graph g has one *)
+let get_reverse_postorder (g: 'a adj_list) ~entry : 'a list =
+  let n = Hashtbl.length g in
+  let visited = Hashtbl.create n in
+  let rev_postorder = ref [] in
+  let rec dfs_rec u =
+    List.iter (fun v -> if (not (Hashtbl.mem visited v)) then dfs_rec v) (Hashtbl.find g u);
+    rev_postorder := u :: !rev_postorder;
+    Hashtbl.replace visited u true;
+  in
+  dfs_rec entry;
+  Hashtbl.iter (fun k _ -> if not(Hashtbl.mem visited k) then dfs_rec k) g;
+  !rev_postorder
+
+let line_count = ref (-1)
+let number_lines_of_blk (blk_cl: block_collection): block_collection =
+  let number_blk blk: block =
+    let number_line line =
+      line_count := !line_count + 1;
+      { line with no = !line_count }
+    in
+    let numbered_lines = List.map number_line blk.lines in
+    { blk with lines = numbered_lines }
+  in
+  let order_blks_id = get_reverse_postorder blk_cl.edges_out "start" in
+  let find_blk id: block =
+    List.find (fun blk -> id = blk.id) blk_cl.blocks
+  in
+  let order_blks = List.map find_blk order_blks_id in
+  let numbered_order_blks = List.map number_blk order_blks in
+  { blk_cl with blocks = numbered_order_blks }
 
 let prog_to_blocks (prog: ir3_program): block_collection =
   let (c_list, c_mthd, mthd_list) = prog in
@@ -347,10 +380,11 @@ let prog_to_blocks (prog: ir3_program): block_collection =
     | hd::tail -> { hd with id = mthd.id3 }::tail
   in
   let all_blocks = List.flatten (List.map make_block all_methods) in
-  {
+  let blk_cl = {
     blocks = all_blocks;
     edges_out = get_flow_graph all_blocks;
   }
+  in number_lines_of_blk blk_cl
 
 (*
   Algorithm 9.14 Live-variable analysis
