@@ -57,6 +57,7 @@ type lsra_t = {
        the next available free register
  *)
 let linear_scan (intvs: live_interval list) =
+  (* List.iter (fun i -> print_endline ("ID: " ^ i.id)) intvs; *)
   let sort_interval a b =
     let (x, _) = a.intv in
     let (y, _) = b.intv in
@@ -84,6 +85,9 @@ let linear_scan (intvs: live_interval list) =
       if end_j < start_i then
         let id = Intv_to_id.find key lsra.active in
         let free_reg = Hashtbl.find lsra.result_tbl id in
+        if not(free_reg = "spill") then
+          let _ = List.find (fun r -> r = free_reg) registers
+        in
         lsra.active <- Intv_to_id.remove key lsra.active;
         lsra.free_reg <- free_reg::lsra.free_reg;
     in Intv_to_id.iter helper lsra.active
@@ -122,7 +126,9 @@ let linear_scan (intvs: live_interval list) =
     let (intv_id, intv) = List.find (fun (id, i) -> id = k) lsra.intervals in
     let res = { id = k; reg = v; intv; } in
     res::acc
-  in *)
+    in
+  *)
+  (* Hashtbl.iter  (fun k v -> print_endline ("KEY: " ^ k ^ " VALUE: " ^ v)) lsra.result_tbl; *)
   lsra.result_tbl
 
 module type Data_flow_analysis = sig
@@ -558,6 +564,6 @@ let live_interval_from_blocks (blocks: new_basic_block list) adj_list: live_inte
       let next_blocks = Hashtbl.find adj_list block_id in
       List.iter preorder_traverse next_blocks
   in
-
+  (* Hashtbl.iter (fun k _ -> print_endline ("KEY: " ^ k) liveness_tbl; *)
   let _ = preorder_traverse "start" in
   Hashtbl.fold (fun k (v1, v2) acc -> {id=k; intv=(v1, v2)} :: acc) liveness_tbl []
